@@ -1,0 +1,4 @@
+# Ignore test and compile stuff
+test/
+.vscode/
+*.o
