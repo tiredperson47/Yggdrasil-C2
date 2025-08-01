@@ -25,7 +25,7 @@ LDFLAGS = -Wl,-Bstatic -luring -Wl,-Bdynamic,-g
 #       all 20 files manually. It finds agent.c and all .c files inside
 #       any subdirectory of 'commands'.
 TARGET = agent
-SRCS = Yggdrasil.c $(wildcard agent_functions/**/**/*.c)
+SRCS = Midgard.c $(wildcard agent_functions/**/**/*.c)
 
 # OBJS: The list of object files (.o) that will be created from the .c files.
 #       This line automatically converts a list like "a.c b.c" to "a.o b.o".

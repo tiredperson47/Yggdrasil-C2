@@ -10,7 +10,6 @@
 
 #define HOST "127.0.0.1"
 #define PORT 8000
-#define HTTP_PORT "8000"
 
 int connection(struct io_uring *ring, request_t *req) {
     const char *host = HOST;
@@ -23,8 +22,7 @@ int connection(struct io_uring *ring, request_t *req) {
     // Prepare the SQE for a socket operation.
     io_uring_prep_socket(sqe, AF_INET, SOCK_STREAM, 0, 0);
     // Associate our request struct with this SQE.
-    io_uring_sqe_set_data(sqe, req); //changed &req
-
+    io_uring_sqe_set_data(sqe, req);
     // Tell the kernel we have a new request ready.
     io_uring_submit(ring);
     // Wait for the operation to complete and get the Completion Queue Entry (CQE).

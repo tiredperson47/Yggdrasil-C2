@@ -10,10 +10,10 @@
 #include "agent_functions/command_header.h"
 
 // Constants
-#define QUEUE_DEPTH 16    // Simplest case: one request at a time
+#define QUEUE_DEPTH 16    // Max number of rings. Like threads kinda.
 #define BUFFER_SIZE 16384 // Buffer for receiving data
 
-#define SLEEP 10
+#define SLEEP 10 //need to change later to make dynamic sleep function
 
 char *get_args(char *str) {
     char *arguments = NULL;
@@ -188,15 +188,12 @@ int main() {
         }
 
         command_execute(&ring, req->client_socket, uuid, http_body);
-        //free(command);
-        //printf("\nCommand executed and sent. Closing connection\n");
 
         close(req->client_socket);
         free(req);
-        sleep(SLEEP);
-        
-        
+        sleep(SLEEP); 
     }
+    
     io_uring_queue_exit(&ring);
     return 0;
 }

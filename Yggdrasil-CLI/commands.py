@@ -1,6 +1,7 @@
 import redis
 import requests
 import os
+import time
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -15,6 +16,22 @@ def send_cmd(url, cmd):
     id = os.getenv('UUID')
     json_payload = {"uuid": id, "command": cmd}
     response = requests.post(url, json=json_payload, headers=header)
+    
+    if cmd == "exit":
+        return
+
+    if response.status_code == 200:
+        key = f"{os.getenv('UUID')}-output"
+        while True:
+            if r.exists(key):
+                bruh = r.lindex(key, -1)
+                #print("Data sent confirmed: ", key)
+                output = r.rpop(key)
+                print(output)
+                break
+            else:
+                time.sleep(1)
+                continue
 
 def agents(*args):
     if r.exists("agents") == 0:
@@ -24,7 +41,7 @@ def agents(*args):
     agent_list = r.lrange("agents", 0, -1)
     
     for i in range(len(agent_list)):
-        print(f'{i}) {agent_list}\n')
+        print(f'{i}) {agent_list[i]}')
     try:
         index = int(input(f"{CYAN}Select an Agent: {RESET}"))
         if index > len(agent_list) - 1:
@@ -36,7 +53,8 @@ def agents(*args):
     os.environ['UUID'] = agent_list[index]
 
 def uuid(*args):
-    print(os.getenv('UUID'))
+    id = os.getenv('UUID')
+    print(f"{CYAN}Current UUID: {RESET}{id}")
 
 def history(length):
     if length:
@@ -53,28 +71,6 @@ def history(length):
     for i in range(len(hist)):
         print(f'{i}) {hist[i]}')
 
-def rename(*args):
-    agent_list = r.lrange("agents", 0, -1)
-    for i in range(len(agent_list)):
-        print(f'{i}) {agent_list}\n')
-    try:
-        index = int(input(f"{CYAN}Index of Agent to Rename: {RESET}"))
-        if index > len(agent_list) - 1:
-            print(f"{RED}ERROR: Invalid Agent Index{RESET}")
-            return
-    except:
-        print(f"{RED}ERROR: Input must be a number!{RESET}")
-        return
-    
-    new_name = input(f"{CYAN}New Name: {RESET}")
-    if new_name in agent_list:
-        print(f"{RED}ERROR: Name already exists: {RESET}{new_name}")
-    else:
-        r.lset("agents", index, new_name)
-        r.rename(agent_list[index], new_name)
-        if os.getenv('UUID') == agent_list[index]:
-            os.environ['UUID'] = new_name
-
 def clear(*args):
     os.system("clear")
 
@@ -83,10 +79,11 @@ def delete(name):
     if name != None and r.exists(name):
         r.delete(name)
         r.lrem("agents", 0, name)
+        del os.environ['UUID']
     else:
         agent_list = r.lrange("agents", 0, -1)
         for i in range(len(agent_list)):
-            print(f'{i}) {agent_list}\n')
+            print(f'{i}) {agent_list[i]}')
         try:
             index = int(input(f"{CYAN}Select an Agent to Delete: {RESET}"))
             if index > len(agent_list) - 1:
@@ -97,3 +94,4 @@ def delete(name):
             return
         r.delete(agent_list[index])
         r.lrem("agents", 0, agent_list[index])
+        del os.environ['UUID']

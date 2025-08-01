@@ -8,7 +8,7 @@
 #include <dirent.h>
 #include <time.h>
 #include <liburing.h>
-#include "agent_functions/functions/send/send2serv.h"
+#include "functions/send/send2serv.h"
 
 void format_mode(mode_t mode, char *str) {
     // File type

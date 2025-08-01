@@ -1,7 +1,6 @@
 import requests
 import redis
 import sys
-import time
 from commands import *
 import os
 
@@ -28,7 +27,6 @@ server_command = {
     "agents": agents,
     "uuid": uuid,
     "history": history,
-    "rename": rename,
     "clear": clear,
     "delete": delete,
 }
@@ -105,22 +103,6 @@ try:
         else:
             print(f"{RED}ERROR: Invalid command:{RESET} {cmd_input}")
             continue
-
-
-        # Wait for output from Agent if submission succeeds
-        print(f"{CYAN} {response} {RESET}")
-        if response.status_code == 200:
-            key = f"{os.getenv('UUID')}-output"
-            while True:
-                if r.exists(key):
-                    bruh = r.lindex(key, -1)
-                    #print("Data sent confirmed: ", key)
-                    output = r.rpop(key)
-                    print(output)
-                    break
-                else:
-                    time.sleep(1)
-                    continue
                     
 except KeyboardInterrupt:
     print("\nServer shutting down.")

@@ -5,9 +5,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <liburing.h>
-#include "agent_functions/functions/connection/connection.h"
-#include "agent_functions/functions/connection/req_struct.h"
-#define QUEUE_DEPTH 16
+#include "functions/connection/connection.h"
+#include "functions/connection/req_struct.h"
+#define QUEUE_DEPTH 3
 
 int send2serv(const char *uuid, const char *buf, size_t len) {
     struct io_uring ring;
@@ -55,7 +55,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
 
     io_uring_cqe_seen(&ring, cqe);
 
-    char response_buffer[1024];
+    /*char response_buffer[1024];
     sqe = io_uring_get_sqe(&ring);
     io_uring_prep_recv(sqe, sockfd, response_buffer, sizeof(response_buffer) - 1, 0);
     io_uring_sqe_set_data(sqe, response_buffer);
@@ -69,10 +69,11 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
         return -1;
     }
 
-    io_uring_cqe_seen(&ring, cqe);
+    io_uring_cqe_seen(&ring, cqe);*/
 
 
-
+    close(req->client_socket);
+    io_uring_queue_exit(&ring);
     free(full_req);
     free(req);
     return 0;
