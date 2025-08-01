@@ -2,27 +2,42 @@ import requests
 import redis
 import sys
 import time
+from commands import *
+import os
 
-url = "http://127.0.0.1:8000/admin"
-header = {"Content-Type": "application/json"}
+RED = "\033[1;31m"
+GREEN = "\033[1;92m"
+BLUE = "\033[1;32m"
+CYAN = "\033[1;36m"
+RESET = "\033[0m"
 
-r = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+url = "http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
 
 def cmd_check(message):
-    words = message.split()
-    if not words:
-        return False
+    if not message:
+        return "invalid"
 
-    if words[0] in command_reg:
-        return True
+    if message in agent_command:
+        return "agent"
+    elif message in server_command:
+        return "server"
     else:
-        return False
+        return "invalid"
 
-command_reg = {
-    "exit",
-    "ls",
-    "list-agents",
+server_command = {
+    "agents": agents,
+    "uuid": uuid,
+    "history": history,
+    "rename": rename,
+    "clear": clear,
+    "delete": delete,
 }
+
+agent_command = {
+    "ls",
+    "exit",
+}
+
 
 logo = r"""
                         ⠤⣀⣀⣾⣷⡾⣿⣷⣀⢳⣿⣿⣿⣦⣆⡠⢀⣀⠀⠀⠀
@@ -53,43 +68,53 @@ logo = r"""
    ██    ██    ██ ██    ██ ██   ██ ██   ██ ██   ██      ██ ██ ██      
    ██     ██████   ██████  ██████  ██   ██ ██   ██ ███████ ██ ███████ 
 """
-
-print(logo, "\n")
-print("==================== Type 'agents' To Get UUIDs ====================")
+print(logo)
+print("========================== Select an Agent ==========================\n")
 
 # A forever loop to accept client connections
 try:
     while True:
-        message_to_send = input("RingTail > ")
+        if not os.getenv('UUID'):
+            agents()
+        
+        message_to_send = input(f"{GREEN}Yggdrasil > {RESET}")
         if not message_to_send.strip():
             continue
+        split_cmd = message_to_send.split(" ", 1)
+        cmd_input = split_cmd[0]
+        if len(split_cmd) == 2:
+            cmd_args = split_cmd[1]
+        else:
+            cmd_args = ""
 
-        if message_to_send == "agents":
-            agent_list = r.lrange("agents", 0, -1)
-            print(agent_list)
-            uuid = input("Select an Agent UUID: ")
+
+        # check to see if it's a server or agent side command. 
+        if cmd_check(cmd_input) == "server":
+            cmd = server_command[cmd_input]
+            cmd(cmd_args)
             continue
         
-        if cmd_check(message_to_send) == True:
-            json_payload = {"uuid": uuid, "command": message_to_send}
-            response = requests.post(url, json=json_payload, headers=header)
+        elif cmd_check(cmd_input) == "agent":
+            send_cmd(url, message_to_send) # if it's an agent side function, send it immediately.
             
-            if message_to_send == "exit":
-                print(f"\n========== Killing {uuid} ==========")
+            if message_to_send == "exit": # exit will delete the agent uuid from redis
+                del os.environ['UUID']
+                print(f"\n========== Killing {os.getenv('UUID')} ==========")
                 continue
 
         else:
-            command = message_to_send.split()
-            print(f"ERROR: Invalid command: {command[0]}")
+            print(f"{RED}ERROR: Invalid command:{RESET} {cmd_input}")
             continue
 
-        print(response)
+
+        # Wait for output from Agent if submission succeeds
+        print(f"{CYAN} {response} {RESET}")
         if response.status_code == 200:
-            key = f"{uuid}-output"
+            key = f"{os.getenv('UUID')}-output"
             while True:
                 if r.exists(key):
                     bruh = r.lindex(key, -1)
-                    print("Data sent confirmed: ", key)
+                    #print("Data sent confirmed: ", key)
                     output = r.rpop(key)
                     print(output)
                     break

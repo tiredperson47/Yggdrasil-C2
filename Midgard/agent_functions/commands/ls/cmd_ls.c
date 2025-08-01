@@ -6,11 +6,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
-//#include <pwd.h>
-//#include <grp.h>
 #include <time.h>
 #include <liburing.h>
-#include "functions/send/send2serv.h"
+#include "agent_functions/functions/send/send2serv.h"
 
 void format_mode(mode_t mode, char *str) {
     // File type

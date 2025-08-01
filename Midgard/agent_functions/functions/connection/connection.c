@@ -65,12 +65,12 @@ void send_get(struct io_uring *ring, request_t *req, const char *uuid) {
     struct io_uring_cqe *cqe;
     char request_buffer[2048];
     int req_len = snprintf(request_buffer, sizeof(request_buffer),
-        "GET /about?uuid=%s HTTP/1.1\r\n"
-        "Host: %s:%s\r\n"
+        "GET /login?uuid=%s HTTP/1.1\r\n"
+        "Host: google.com\r\n"
         "User-Agent: Wget/1.20.3 (linux-gnu)\r\n"
         "Accept: */*\r\n"
         "Connection: close\r\n\r\n",
-        uuid, HOST, HTTP_PORT);
+        uuid);
 
     sqe = io_uring_get_sqe(ring);
     io_uring_prep_send(sqe, req->client_socket, request_buffer, req_len, 0);
