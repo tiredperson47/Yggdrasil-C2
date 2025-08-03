@@ -2,3 +2,4 @@
 test/
 .vscode/
 *.o
+agents.db
