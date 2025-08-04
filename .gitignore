@@ -3,3 +3,4 @@ test/
 .vscode/
 *.o
 agents.db
+bruh.py

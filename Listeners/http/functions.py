@@ -1,7 +1,7 @@
 import redis
 import requests
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -10,15 +10,20 @@ RESET = "\033[0m"
 
 r = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
 
-def register_agent(uuid):
+def register_agent(uuid, path):
     r.rpush(uuid, "AGENT REGISTERED")
-    r.rpush("agents", uuid)
+    #r.rpush("agents", uuid) # using redis to track agents (deprecated)
     print(f"{CYAN}{uuid} Registered{RESET}")
-    checkin = datetime.utcnow()
-    print(checkin)
-    #conn = sqlite3.connect("agents")
-    #cur = conn.cursor()
-    #cur.execute()
+    utc = datetime.now(timezone.utc)
+    checkin = utc.isoformat()
+    conn = sqlite3.connect(path)
+    cur = conn.cursor()
+
+    # Future implement: read a yaml/json file for the default sleep int. Or Some other work around
+    sql_insert = """INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep) VALUES (?, ?, ?, ?, ?, ?)"""
+    cur.execute(sql_insert, (uuid, uuid, "ALIVE", checkin, checkin, 10))
+    conn.commit()
+    conn.close()
     return ""
 
 def create_db(path):
@@ -26,13 +31,41 @@ def create_db(path):
     cur = conn.cursor()
 
     cur.execute('''CREATE TABLE IF NOT EXISTS agents (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        uuid TEXT, name TEXT,
+        uuid TEXT PRIMARY KEY,
+        name TEXT,
         status TEXT,
         first_seen TIMESTAMP,
         last_seen TIMESTAMP,
         sleep INTEGER
         )
     ''')
+    conn.commit()
+    conn.close()
+
+# Check and process small commands. (exit, sleep, etc)
+def small_check(uuid, path):
+    cmd = r.lindex(uuid, -2)
+    raw_cmd = cmd.split(" ", 1)
+    match raw_cmd[0]:
+        case "exit":
+            r.lrem("agents", 0, uuid)
+            r.delete(uuid)
+            r.delete(f"{uuid}-output")
+        case "sleep":
+            conn = sqlite3.connect(path)
+            cur = conn.cursor()
+            sql_update = """UPDATE agents SET sleep = ? WHERE uuid = ?"""
+            cur.execute(sql_update, (raw_cmd[1], uuid))
+            conn.commit()
+            conn.close()
+
+def update_seen(uuid, path):
+    conn = sqlite3.connect(path)
+    cur = conn.cursor()
+
+    utc = datetime.now(timezone.utc)
+    current_time = utc.isoformat()
+    update = "UPDATE agents SET last_seen = ? WHERE uuid = ?"
+    cur.execute(update, (current_time, uuid))
     conn.commit()
     conn.close()

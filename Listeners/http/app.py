@@ -30,17 +30,16 @@ def commander():
         uuid = request.args.get('uuid')
         cache = r.lindex(uuid, -1)
         if r.exists(uuid) == 0:
-            command = register_agent(uuid)
+            command = register_agent(uuid, db_path)
 
         elif "SEEN" in cache or "AGENT REGISTERED" in cache:
+            update_seen(uuid, db_path)
             command = ""
         else:
+            update_seen(uuid, db_path)
             command = cache
             r.rpush(uuid, "SEEN")
-            if r.lindex(uuid, -2) == "exit":
-                r.lrem("agents", 0, uuid)
-                r.delete(uuid)
-                r.delete(f"{uuid}-output")
+            small_check(uuid, db_path)
         return command
 
     elif request.method == 'POST':
