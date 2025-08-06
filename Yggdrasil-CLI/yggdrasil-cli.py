@@ -3,24 +3,18 @@ import redis
 import sys
 from commands import *
 import os
+import yaml
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
-url = "http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
 
-def cmd_check(message):
-    if not message:
-        return "invalid"
+url = f"http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
 
-    if message in agent_command:
-        return "agent"
-    elif message in server_command:
-        return "server"
-    else:
-        return "invalid"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+profile_path = os.path.join(script_dir, '..', 'Agent_Profiles')
 
 server_command = {
     "agents": agents,
@@ -28,12 +22,10 @@ server_command = {
     "history": history,
     "clear": clear,
     "delete": delete,
-}
-
-agent_command = {
-    "ls",
-    "exit",
-    "sleep",
+    "rename": rename,
+    "help": help,
+    "uuid2name": uuid2name,
+    "name2uuid": name2uuid,
 }
 
 
@@ -72,8 +64,8 @@ print("========================== Select an Agent ==========================\n")
 # A forever loop to accept client connections
 try:
     while True:
-        if not os.getenv('UUID'):
-            agents()
+        # if not os.getenv('UUID') or not os.getenv('PROFILE'):
+        #     agents()
         
         message_to_send = input(f"{GREEN}Yggdrasil > {RESET}")
         if not message_to_send.strip():
@@ -85,14 +77,21 @@ try:
         else:
             cmd_args = ""
 
-
-        # check to see if it's a server or agent side command. 
-        if cmd_check(cmd_input) == "server":
+        if cmd_input in server_command:
             cmd = server_command[cmd_input]
             cmd(cmd_args)
             continue
+
+        if not os.getenv('UUID'):
+            agents()
+            continue
         
-        elif cmd_check(cmd_input) == "agent":
+        command_config = f'{profile_path}/{os.environ['PROFILE']}/commands.yaml' 
+        with open(command_config, 'r') as file:
+            config = yaml.safe_load(file)
+        commands = config['commands']
+
+        if cmd_input in commands:
             send_cmd(url, message_to_send) # if it's an agent side function, send it immediately.
             
             if message_to_send == "exit": # exit will delete the agent uuid from redis

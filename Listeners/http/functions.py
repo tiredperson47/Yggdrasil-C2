@@ -10,7 +10,7 @@ RESET = "\033[0m"
 
 r = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
 
-def register_agent(uuid, path):
+def register_agent(uuid, profile, path):
     r.rpush(uuid, "AGENT REGISTERED")
     #r.rpush("agents", uuid) # using redis to track agents (deprecated)
     print(f"{CYAN}{uuid} Registered{RESET}")
@@ -20,8 +20,8 @@ def register_agent(uuid, path):
     cur = conn.cursor()
 
     # Future implement: read a yaml/json file for the default sleep int. Or Some other work around
-    sql_insert = """INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep) VALUES (?, ?, ?, ?, ?, ?)"""
-    cur.execute(sql_insert, (uuid, uuid, "ALIVE", checkin, checkin, 10))
+    sql_insert = """INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep, profile) VALUES (?, ?, ?, ?, ?, ?, ?)"""
+    cur.execute(sql_insert, (uuid, uuid, "ALIVE", checkin, checkin, 10, profile))
     conn.commit()
     conn.close()
     return ""
@@ -36,7 +36,8 @@ def create_db(path):
         status TEXT,
         first_seen TIMESTAMP,
         last_seen TIMESTAMP,
-        sleep INTEGER
+        sleep INTEGER,
+        profile TEXT
         )
     ''')
     conn.commit()

