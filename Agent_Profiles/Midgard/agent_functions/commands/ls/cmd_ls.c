@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -85,7 +83,6 @@ void cmd_ls(struct io_uring *ring, int sockfd, const char *uuid, const char *arg
             continue; // Skip files we can't stat
         }
 
-        // --- Format the line for this entry ---
         char mode_str[11];
         format_mode(file_stat.st_mode, mode_str);
 
@@ -107,7 +104,6 @@ void cmd_ls(struct io_uring *ring, int sockfd, const char *uuid, const char *arg
                time_str,
                entry->d_name);
 
-        // --- Append to the main output buffer, reallocating if necessary ---
         if (current_len + line_len >= buffer_size) {
             buffer_size *= 2;
             char *new_buffer = realloc(output_buffer, buffer_size);
@@ -125,9 +121,7 @@ void cmd_ls(struct io_uring *ring, int sockfd, const char *uuid, const char *arg
 
     closedir(dir);
 
-    // Send the entire formatted block back to the server
-    //printf("%s", output_buffer);
-    //printf("%ld", current_len);
+
     if (current_len > 0) {
         send2serv(uuid, output_buffer, current_len);
     } else {

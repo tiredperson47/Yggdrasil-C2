@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <time.h>
 #include "agent_functions/command_header.h"
+#include "agent_functions/function_header.h"
 
 // Constants
 #define QUEUE_DEPTH 16    // Max number of rings. Like threads kinda.
@@ -56,6 +57,8 @@ unsigned int hash(char *name) {
 
 check function[] = {
     {"ls", cmd_ls},
+    {"cat", cmd_cat},
+    {"env", cmd_env},
     {"NULL", NULL}
 };
 

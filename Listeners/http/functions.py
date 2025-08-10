@@ -12,14 +12,13 @@ r = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
 
 def register_agent(uuid, profile, path):
     r.rpush(uuid, "AGENT REGISTERED")
-    #r.rpush("agents", uuid) # using redis to track agents (deprecated)
     print(f"{CYAN}{uuid} Registered{RESET}")
     utc = datetime.now(timezone.utc)
     checkin = utc.isoformat()
     conn = sqlite3.connect(path)
     cur = conn.cursor()
 
-    # Future implement: read a yaml/json file for the default sleep int. Or Some other work around
+    # Future implement (maybe): read a yaml/json file for the default sleep int. Or Some other work around
     sql_insert = """INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep, profile) VALUES (?, ?, ?, ?, ?, ?, ?)"""
     cur.execute(sql_insert, (uuid, uuid, "ALIVE", checkin, checkin, 10, profile))
     conn.commit()
@@ -32,7 +31,7 @@ def create_db(path):
 
     cur.execute('''CREATE TABLE IF NOT EXISTS agents (
         uuid TEXT PRIMARY KEY,
-        name TEXT,
+        name TEXT NOT NULL UNIQUE,
         status TEXT,
         first_seen TIMESTAMP,
         last_seen TIMESTAMP,
@@ -49,9 +48,14 @@ def small_check(uuid, path):
     raw_cmd = cmd.split(" ", 1)
     match raw_cmd[0]:
         case "exit":
-            r.lrem("agents", 0, uuid)
             r.delete(uuid)
             r.delete(f"{uuid}-output")
+            conn = sqlite3.connect(path)
+            cur = conn.cursor()
+            sql_delete = """DELETE FROM agents WHERE uuid = ?"""
+            cur.execute(sql_delete, (uuid,))
+            conn.commit()
+            conn.close()
         case "sleep":
             conn = sqlite3.connect(path)
             cur = conn.cursor()

