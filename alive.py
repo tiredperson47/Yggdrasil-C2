@@ -4,7 +4,7 @@ import os
 import time
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(script_dir, 'Listeners', 'http', 'agents.db')
+db_path = os.path.join(script_dir, 'Listeners', 'data', 'agents.db')
 
 while True:
     current_time = datetime.now()

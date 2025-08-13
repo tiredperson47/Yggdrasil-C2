@@ -2,15 +2,16 @@ import redis
 import requests
 import sqlite3
 from datetime import datetime, timezone
+import os
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
-r = redis.Redis(host='127.0.0.1', port=6379, db=0, decode_responses=True)
+r = redis.Redis(host=os.getenv('REDIS_HOST'), port=6379, db=0, decode_responses=True)
 
-def register_agent(uuid, profile, path):
+def register_agent(uuid, profile, ip, path):
     r.rpush(uuid, "AGENT REGISTERED")
     print(f"{CYAN}{uuid} Registered{RESET}")
     utc = datetime.now(timezone.utc)
@@ -19,8 +20,8 @@ def register_agent(uuid, profile, path):
     cur = conn.cursor()
 
     # Future implement (maybe): read a yaml/json file for the default sleep int. Or Some other work around
-    sql_insert = """INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep, profile) VALUES (?, ?, ?, ?, ?, ?, ?)"""
-    cur.execute(sql_insert, (uuid, uuid, "ALIVE", checkin, checkin, 10, profile))
+    sql_insert = """INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep, profile, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
+    cur.execute(sql_insert, (uuid, uuid, "ALIVE", checkin, checkin, 10, profile, ip))
     conn.commit()
     conn.close()
     return ""
@@ -36,7 +37,8 @@ def create_db(path):
         first_seen TIMESTAMP,
         last_seen TIMESTAMP,
         sleep INTEGER,
-        profile TEXT
+        profile TEXT,
+        ip TEXT
         )
     ''')
     conn.commit()

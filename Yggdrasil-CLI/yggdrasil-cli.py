@@ -4,6 +4,7 @@ import sys
 from commands import *
 import os
 import yaml
+from functions import *
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
