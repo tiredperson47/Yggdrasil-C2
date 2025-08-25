@@ -89,7 +89,7 @@ try:
         commands = config['commands']
 
         if cmd_input in commands:
-            send_cmd(message_to_send) # if it's an agent side function, send it immediately.
+            send_cmd(os.getenv('UUID'), message_to_send) # if it's an agent side function, send it immediately.
             
             if message_to_send == "exit": # exit will delete the agent uuid from redis
                 print(f"{CYAN}Killing UUID: {RESET}{os.getenv('UUID')}")

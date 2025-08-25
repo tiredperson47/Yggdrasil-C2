@@ -16,7 +16,7 @@ RESET = "\033[0m"
 
 # Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
 script_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(script_dir, '..', 'Listeners', 'data', 'agents.db')
+db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
 history_csv = os.path.join(script_dir, "history.csv")
 
 if not os.path.exists(db_path):

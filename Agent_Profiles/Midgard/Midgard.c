@@ -82,6 +82,7 @@ void command_execute(struct io_uring *ring, int sockfd, const char *uuid, char *
     char *command = input;
     if (strcmp(command, "sleep") == 0) {
         sleep_int = atoi(args);
+        send2serv(uuid, "Done", 6);
     } else {
         char lookup_key[CMD_LEN];
         snprintf(lookup_key, sizeof(lookup_key), command);

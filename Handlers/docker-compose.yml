@@ -1,0 +1,49 @@
+services:
+  flask_app:
+    container_name: yggdrasil-handler
+    build: ./http
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    networks:
+      - yggdrasil
+    environment:
+      REDIS_HOST: redis
+    volumes:
+      # Maps ./data on the host to /app/data in the container
+      - ./data:/app/data
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - yggdrasil
+
+  # mythic_http_listener: # Mythic Compatability (WIP)
+  #   image: ghcr.io/mythicc2profiles/http:latest
+  #   container_name: mythic-http-listener
+  #   restart: always
+  #   depends_on:
+  #     - flask_app
+  #   ports:
+  #     - "8080:80"
+  #   environment:
+  #     - MYTHIC_URL=flask_app
+  #     - MYTHIC_WEBSOCKET_URL=flask_app
+      
+  #     # --- Optional: C2 Profile Specific Settings ---
+  #     # You can pre-configure listener settings here.
+  #     # These are the same options you would see in the Mythic UI.
+  #     # The port the container listens on internally for agent connections.
+  #     - "callback_port=80"
+  #     - "callback_host=http://192.168.160.1:8080"
+  #   networks:
+  #     - yggdrasil
+
+networks:
+  yggdrasil:
+    driver: bridge
