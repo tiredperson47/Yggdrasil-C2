@@ -59,8 +59,7 @@ def send_cmd(id, cmd):
         key = f"{os.getenv('UUID')}-output"
         while True: # Wait for the output to appear at <uuid>-output
             if r.exists(key):
-                output = r.get(key) # prints last index and deletes last index
-                r.delete(key)
+                output = r.rpop(key) # prints last index and deletes last index
                 try:
                     print(output.decode('utf-8'))
                 except: 
@@ -94,19 +93,22 @@ def uuid(*bruh):
 
 # Get all commands sent to the agent. 
 def history(length):
-    if length:
-        tmp = int(length)
-        index = -tmp
-    else:
-        index = 1
-    raw = r.lrange(os.getenv('UUID'), index, -1)
-    hist = []
-    for i in range(len(raw)):
-        if raw[i].decode('utf-8') != "SEEN" and raw[i].decode('utf-8') != "AGENT REGISTERED": # Skip lines that have SEEN or AGENT REGISTERED
-            hist.append(raw[i].decode('utf-8'))
-    
-    for i in range(len(hist)):
-        print(f'{i}) {hist[i]}')
+    try:
+        if length:
+            tmp = int(length)
+            index = -tmp
+        else:
+            index = 1
+        raw = r.lrange(os.getenv('UUID'), index, -1)
+        hist = []
+        for i in range(len(raw)):
+            if raw[i].decode('utf-8') != "SEEN" and raw[i].decode('utf-8') != "AGENT REGISTERED": # Skip lines that have SEEN or AGENT REGISTERED
+                hist.append(raw[i].decode('utf-8'))
+        
+        for i in range(len(hist)):
+            print(f'{i}) {hist[i]}')
+    except:
+        print(f"{RED}ERROR: No history found or empty Redis{RESET}")
 
 
 def clear(bruh):
@@ -178,7 +180,7 @@ def help(cmd):
         elif os.getenv('PROFILE'):
             script_dir = os.path.dirname(os.path.abspath(__file__)) #Open Agent's commands.yaml file to find and list command descriptions
             profile_path = os.path.join(script_dir, '..', 'Agent_Profiles')
-            command_config = f'{profile_path}/{os.environ['PROFILE']}/commands.yaml' #Build absolute path
+            command_config = f"{profile_path}/{os.environ['PROFILE']}/commands.yaml" #Build absolute path
             with open(command_config, 'r') as file:
                 config = yaml.safe_load(file)
             command_list = config.get('help', {})
@@ -194,7 +196,7 @@ def help(cmd):
         if os.getenv('PROFILE'):
             script_dir = os.path.dirname(os.path.abspath(__file__))
             profile_path = os.path.join(script_dir, '..', 'Agent_Profiles')
-            command_config = f'{profile_path}/{os.environ['PROFILE']}/commands.yaml' # build absolute path
+            command_config = f"{profile_path}/{os.environ['PROFILE']}/commands.yaml" # build absolute path
             with open(command_config, 'r') as file:
                 config = yaml.safe_load(file)
             commands = config['commands']
@@ -255,8 +257,7 @@ def mass(bruh):
         remove = []
         for name, key in output_keys.items():
             if r.exists(key):
-                output = r.get(key)
-                r.delete(key)
+                output = r.rpop(key)
                 try:
                     print(f"{GREEN}{name}:\n{RESET}{output.decode('utf-8')}\n")
                     remove.append(name)

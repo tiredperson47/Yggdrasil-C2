@@ -83,7 +83,7 @@ try:
             agents()
             continue
         
-        command_config = f'{profile_path}/{os.environ['PROFILE']}/commands.yaml' 
+        command_config = f"{profile_path}/{os.environ['PROFILE']}/commands.yaml" 
         with open(command_config, 'r') as file:
             config = yaml.safe_load(file)
         commands = config['commands']

