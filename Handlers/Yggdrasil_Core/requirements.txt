@@ -4,5 +4,5 @@ requests
 redis
 pyyaml
 sqlalchemy
-pymysql
 python-dotenv
+pymysql

@@ -1,15 +1,26 @@
 #!/bin/bash
 
-source venv/bin/activate
-/usr/bin/pip install -r requirements.txt
-/usr/bin/sudo /usr/bin/docker pull redis:latest
-/usr/bin/sudo /usr/bin/docker run -d -p 127.0.0.1:6379:6379 --name redis redis
+# liburing-dev is for Midgard C2 Agent
+PASSDB=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 28)
+sed -i "s/\(DB_PASS=\).*/\1${PASSDB}/" Handlers/.env
+sed -i "s/IDENTIFIED BY '[^']*'/IDENTIFIED BY '$PASSDB'/" tables.sql
 
-for args in "$@"; do 
-if [[ "$args" == "http" || "$args" == "HTTP" ]]; then
-    cd Listeners/http
-    /usr/bin/gunicorn --workers 4 --bind 0.0.0.0:8000 app:app &
+/usr/bin/sudo /usr/bin/apt install rlwrap liburing-dev mariadb-client-core -y
 
-elif [[ "$args" == "alive" || "$args" == "ALIVE" ]]; then
-    python3 alive.py &
-fi
+cd Handlers/Yggdrasil_Core
+/usr/bin/sudo /usr/bin/docker-compose up -d --build
+cd ../
+/usr/bin/sudo /usr/bin/docker cp .env yggdrasil-handler:/
+cd ..
+
+
+echo ""
+echo "========================================="
+echo '[!] Waiting for database to be healthy...'
+until [ "$(sudo docker inspect -f '{{.State.Health.Status}}' mariadb)" == "healthy" ]; do
+    sleep 1
+done
+echo '[+] Database is healthy. Importing tables...'
+
+sleep 10
+/usr/bin/sudo /usr/bin/docker exec -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil < tables.sql

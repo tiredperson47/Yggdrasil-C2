@@ -4,6 +4,7 @@ commands:
     - sleep
     - cat
     - env
+    - execute_assembly
 
 help:
     ls: "List current directory Relative path works too except for '~'. Usage: ls </path/to/directory>"
@@ -11,3 +12,4 @@ help:
     sleep: "Set the sleep interval for the agent. Usage: sleep <seconds>"
     cat: "Read the contents of the file. Relative path works too except for '~'. Usage: cat </path/to/file>"
     env: "Read environmental variables at /proc/self/environ"
+    execute_assembly: "Execute Linux binaries. Usage: execute_assembly <absolute file path>"

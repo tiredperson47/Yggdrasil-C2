@@ -6,7 +6,8 @@
 #include <unistd.h>
 #include <liburing.h>
 #include <errno.h>
-#include "req_struct.h" //This may show "no file or direcotry" error, but trust me it works
+#include "req_struct.h"
+#include "functions/http_parse/http_parse.h"
 
 #define HOST "127.0.0.1"
 #define PORT 8000
@@ -59,19 +60,19 @@ int connection(struct io_uring *ring, request_t *req) {
 }
 
 
-void send_get(struct io_uring *ring, request_t *req, const char *uuid) {
+char *send_get(struct io_uring ring, request_t *req, const char *uuid, char *path) {
     struct io_uring_sqe *sqe;
     struct io_uring_cqe *cqe;
     char request_buffer[2048];
     int req_len = snprintf(request_buffer, sizeof(request_buffer),
-        "GET /login?uuid=%s HTTP/1.1\r\n"
+        "GET /%s HTTP/1.1\r\n"
         "Host: google.com\r\n"
         "Accept-Language: en-US,en;q=0.\r\n"
         "Upgrade-Insecure-Requests: 1\r\n"
         "User-Agent: %s/324.54 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36\r\n"
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
         "Sec-Ch-Ua-Mobile: ?0\r\n"
-        "X-Client-Data: CNGLywE=\r\n"
+        "X-Client-Data: %s\r\n"
         "Sec-Fetch-Site: none\r\n"
         "Sec-Fetch-Mode: navigate\r\n"
         "Sec-Fetch-User: ?1\r\n"
@@ -79,11 +80,56 @@ void send_get(struct io_uring *ring, request_t *req, const char *uuid) {
         "Accept-Encoding: gzip, deflate, br\r\n"
         "Priority: u=0, i\r\n"
         "Connection: close\r\n\r\n",
-        uuid, PROFILE);
+        path, PROFILE, uuid);
 
-    sqe = io_uring_get_sqe(ring);
+    sqe = io_uring_get_sqe(&ring);
     io_uring_prep_send(sqe, req->client_socket, request_buffer, req_len, 0);
-    io_uring_submit(ring);
-    io_uring_wait_cqe(ring, &cqe);
-    io_uring_cqe_seen(ring, cqe);
+    io_uring_submit(&ring);
+    io_uring_wait_cqe(&ring, &cqe);
+    io_uring_cqe_seen(&ring, cqe);
+
+    size_t n;
+    size_t total_read = 0;
+        int cont_length = -1;
+        int header_parsed = 0;
+        size_t body_offset = 0;
+        while (1) {
+            req->iov.iov_base = req->buffer + total_read;
+            req->iov.iov_len = BUFFER_SIZE - 1 - total_read;
+            sqe = io_uring_get_sqe(&ring);
+            // Prepare the SQE for a receive operation (using readv).
+            io_uring_prep_readv(sqe, req->client_socket, &req->iov, 1, 0);
+            io_uring_sqe_set_data(sqe, req);
+            io_uring_submit(&ring);
+            io_uring_wait_cqe(&ring, &cqe);
+            n = cqe->res;
+            io_uring_cqe_seen(&ring, cqe);
+            req->buffer[n] = '\0';
+
+            if (n <= 0) {
+                break;
+            }
+
+            total_read += n;
+
+            if (!header_parsed) {
+                char *end = header_end(req->buffer);
+                if (end) {
+                    header_parsed = 1;
+                    body_offset = end - req->buffer + 4;
+                    cont_length = content_length(req->buffer);
+                }
+            }
+            
+            if (header_parsed && cont_length > -1) {
+                size_t body_len = total_read - body_offset;
+                if (body_len >= (size_t)content_length) {
+                    break;
+                }
+            }
+
+        }
+
+        char *http_body = req->buffer + body_offset;
+        return http_body;
 }

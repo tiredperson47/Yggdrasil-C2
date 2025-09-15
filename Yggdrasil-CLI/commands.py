@@ -2,9 +2,10 @@ import redis
 import requests
 import os
 import time
-import sqlite3
 import yaml
 from functions import *
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -39,7 +40,23 @@ url = f"http://127.0.0.1:8000/admin" # change later to proper port/ip/domain nam
 
 header = {"Content-Type": "application/json"}
 
-# A clean way to list agents and status.
+load_dotenv("../Handlers/.env")
+db_user = os.getenv('DB_USER')
+db_pass = os.getenv('DB_PASS')
+database = os.getenv('DATABASE')
+db_host = os.getenv('HOST')
+
+try:
+    URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
+    engine = create_engine(
+        URL,
+        pool_size=5, # keep 5 open connections ready
+        max_overflow=10, # allow up to 10 extra if demand spikes
+        pool_recycle=1800, # recycle connections after 30 min
+        pool_pre_ping=True # check if connection is alive before use
+        )
+except:
+    print(f"{RED}Error connecting to MariaDB Platform!{RESET}")
 
 
 # Sends agent commands to the Gunicorn/flask app HTTP listener at /admin
@@ -82,6 +99,7 @@ def agents(*agrs):
         print(f"{RED}ERROR: Input must be a number {RESET}")
         return
     os.environ['UUID'] = result[agent_index][0]
+    os.environ['NAME'] = result[agent_index][1]
     os.environ['PROFILE'] = result[agent_index][3]
     os.environ['IP'] = result[agent_index][4]
 
@@ -119,17 +137,14 @@ def delete(bruh):
     agent_list = print_table()
     agent_index = list(map(int, input(f"{CYAN}Select Agent indexes separated by spaces: {RESET}").split()))
     for i in range(len(agent_index)):
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        sql_delete = "DELETE FROM agents WHERE uuid = ? AND NOT status = ?" # Update sqlite database
-        uuid = agent_list[agent_index[i]][0]
-        name = agent_list[agent_index[i]][1]
-        cur.execute(sql_delete, (uuid, "ALIVE"))
-        conn.commit()
-        if os.getenv('UUID') and uuid == os.environ['UUID']:
-            del os.environ['UUID']
+        # conn = sqlite3.connect(db_path)
+        with engine.begin() as conn:
+            sql_delete = text("DELETE FROM agents WHERE uuid = :uuid AND NOT status = :status") # Update sqlite database
+            uuid = agent_list[agent_index[i]][0]
+            name = agent_list[agent_index[i]][1]
+            tmp = conn.execute(sql_delete, {"uuid": uuid, "status": "ALIVE"})
         
-        if cur.rowcount == 0:
+        if tmp.rowcount == 0:
             print(f'{RED}ERROR: An Agent is alive{RESET}')
             choice = input(f'{RED}Are you sure you want to delete: {name}? THIS WILL KILL THE AGENT!{RESET} (y/n): ')
 
@@ -140,12 +155,13 @@ def delete(bruh):
         else:
             r.delete(uuid)
             r.delete(f"{uuid}-output")
-        conn.close
-
+            if os.getenv('UUID') and uuid == os.getenv('UUID'):
+                os.environ['UUID'] = ""
+                os.environ['NAME'] = ""
 
 
 # Rename agents by index
-def rename(name):
+def rename(bruh):
     result = print_table()
     try:
     # get int user input and grab the uuid of that agent name. Allows for Name to UUID translation.
@@ -160,13 +176,13 @@ def rename(name):
         return
 
     try: 
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        uuid = result[agent_index][0] # result is from print_table()
-        sql_update = "UPDATE agents SET name = ? WHERE uuid = ?" # Update database
-        cur.execute(sql_update, (new_name, uuid))
-        conn.commit()
-        conn.close()
+        # conn = sqlite3.connect(db_path)
+        with engine.begin() as conn:
+            uuid = result[agent_index][0] # result is from print_table()
+            sql_update = text("UPDATE agents SET name = :name WHERE uuid = :uuid") # Update database
+            conn.execute(sql_update, {"name": new_name, "uuid": uuid})
+
+        os.environ['NAME'] = new_name
     except:
         print(f"{RED}ERROR: Name already exists{RESET}")
         return
@@ -206,11 +222,11 @@ def help(cmd):
 
 # Translate uuid to agent name
 def uuid2name(uuid):
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM agents WHERE uuid = ?", (uuid,))
-    name = cur.fetchone()
-    conn.close()
+    # conn = sqlite3.connect(db_path)
+    with engine.begin() as conn:
+        query = text("SELECT name FROM agents WHERE uuid = :uuid")
+        tmp = conn.execute(query, {"uuid": uuid})
+        name = tmp.fetchone()
     if name:
         print(f"{CYAN}Name: {RESET}{name[0]}")
     else:
@@ -218,11 +234,11 @@ def uuid2name(uuid):
 
 # translate agent name to uuid. 
 def name2uuid(name):
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT uuid FROM agents WHERE name = ?", (name,))
-    uuid = cur.fetchone()
-    conn.close()
+    # conn = sqlite3.connect(db_path)
+    with engine.begin() as conn:
+        query = text("SELECT uuid FROM agents WHERE name = :name")
+        tmp = conn.execute(query, {"name": name})
+        uuid = tmp.fetchone()
     if uuid:
         print(f"{CYAN}UUID: {RESET}{uuid[0]}")
     else:

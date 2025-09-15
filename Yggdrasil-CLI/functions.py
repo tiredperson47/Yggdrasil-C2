@@ -3,9 +3,10 @@
 #import yaml
 #import time
 import os
-import sqlite3
+from sqlalchemy import create_engine, text
 import csv
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 
 
 RED = "\033[1;31m"
@@ -16,39 +17,39 @@ RESET = "\033[0m"
 
 # Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
 script_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
+#db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
 history_csv = os.path.join(script_dir, "history.csv")
-
-if not os.path.exists(db_path):
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-
-    cur.execute('''CREATE TABLE IF NOT EXISTS agents (
-        uuid TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        status TEXT,
-        first_seen TIMESTAMP,
-        last_seen TIMESTAMP,
-        sleep INTEGER,
-        profile TEXT,
-        ip TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
 
 if not os.path.exists(history_csv):
     with open('history.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Agent', 'IP', 'Command', 'Time'])
 
+load_dotenv("../Handlers/.env")
+db_user = os.getenv('DB_USER')
+db_pass = os.getenv('DB_PASS')
+database = os.getenv('DATABASE')
+db_host = os.getenv('HOST')
+
+try:
+    URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
+    engine = create_engine(
+        URL,
+        pool_size=5, # keep 5 open connections ready
+        max_overflow=10, # allow up to 10 extra if demand spikes
+        pool_recycle=1800, # recycle connections after 30 min
+        pool_pre_ping=True # check if connection is alive before use
+    )
+except:
+    print(f"{RED}Error connecting to MariaDB Platform!{RESET}")
+
 def print_table():
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    sql_select = """SELECT uuid, name, status, profile, ip FROM agents"""
-    cur.execute(sql_select)
-    result = cur.fetchall()
-    conn.close()
+    # # conn = sqlite3.connect(db_path)
+    # cur = conn.cursor()
+    with engine.begin() as conn:
+        sql_select = text("SELECT uuid, name, status, profile, ip FROM agents")
+        tmp = conn.execute(sql_select)
+        result = tmp.fetchall()
 
     if not result:
         print(f"{CYAN}No Callbacks Yet!{RESET}")

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,7 @@ void cmd_cat(struct io_uring *ring, int sockfd, const char *uuid, const char *in
     size_t total = 0;
 
     sqe = io_uring_get_sqe(ring);
-    io_uring_prep_openat(sqe, AT_FDCWD, input, O_RDONLY, 0); //AT_FDCWD may show an error, but it does work. It's imported from liburing, so no need to import fcntl.h
+    io_uring_prep_openat(sqe, AT_FDCWD, input, O_RDONLY, 0);
     io_uring_submit(ring);
     io_uring_wait_cqe(ring, &cqe);
     fd = cqe->res;

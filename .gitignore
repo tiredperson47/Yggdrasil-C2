@@ -5,3 +5,7 @@ test/
 agents.db
 bruh.py
 history.csv
+agent
+venv/
+.env
+mariadb/

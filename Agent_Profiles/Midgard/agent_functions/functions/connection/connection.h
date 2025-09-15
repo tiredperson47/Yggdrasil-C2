@@ -7,5 +7,5 @@
 #include "req_struct.h"
 
 int connection(struct io_uring *ring, request_t *req);
-void send_get(struct io_uring *ring, request_t *req, const char *uuid);
+char *send_get(struct io_uring *ring, request_t *req, const char *uuid, char *path);
 #endif

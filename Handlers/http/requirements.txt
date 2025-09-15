@@ -1,5 +1,0 @@
-gunicorn
-flask
-requests
-redis
-pyyaml

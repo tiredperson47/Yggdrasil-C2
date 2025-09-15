@@ -8,6 +8,7 @@ from functions import *
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
+DGRN = "\x1b[38;5;22m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
@@ -64,7 +65,7 @@ print("========================== Select an Agent ==========================\n")
 # A forever loop to accept client connections
 try:
     while True:
-        message_to_send = input(f"{GREEN}Yggdrasil > {RESET}")
+        message_to_send = input(f"{GREEN}Yggdrasil {DGRN}[{os.getenv('NAME')}]{RESET} > {RESET}")
         if not message_to_send.strip():
             continue
         split_cmd = message_to_send.split(" ", 1)
@@ -93,7 +94,8 @@ try:
             
             if message_to_send == "exit": # exit will delete the agent uuid from redis
                 print(f"{CYAN}Killing UUID: {RESET}{os.getenv('UUID')}")
-                del os.environ['UUID']
+                os.environ['UUID'] = ""
+                os.environ['NAME'] = ""
                 continue
 
         else:

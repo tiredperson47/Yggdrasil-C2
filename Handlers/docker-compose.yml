@@ -1,7 +1,7 @@
 services:
   flask_app:
     container_name: yggdrasil-handler
-    build: ./http
+    build: ./Yggdrasil_Core
     ports:
       - "8000:8000"
     depends_on:
@@ -10,9 +10,9 @@ services:
       - yggdrasil
     environment:
       REDIS_HOST: redis
-    volumes:
-      # Maps ./data on the host to /app/data in the container
-      - ./data:/app/data
+    # volumes:
+    #   # Maps ./data on the host to /app/data in the container
+    #   - ./data:/app/data
 
   redis:
     image: redis:latest
@@ -23,26 +23,26 @@ services:
     networks:
       - yggdrasil
 
-  # mythic_http_listener: # Mythic Compatability (WIP)
-  #   image: ghcr.io/mythicc2profiles/http:latest
-  #   container_name: mythic-http-listener
-  #   restart: always
-  #   depends_on:
-  #     - flask_app
-  #   ports:
-  #     - "8080:80"
-  #   environment:
-  #     - MYTHIC_URL=flask_app
-  #     - MYTHIC_WEBSOCKET_URL=flask_app
-      
-  #     # --- Optional: C2 Profile Specific Settings ---
-  #     # You can pre-configure listener settings here.
-  #     # These are the same options you would see in the Mythic UI.
-  #     # The port the container listens on internally for agent connections.
-  #     - "callback_port=80"
-  #     - "callback_host=http://192.168.160.1:8080"
-  #   networks:
-  #     - yggdrasil
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASS} # Replace with a strong password
+      MYSQL_DATABASE: ${DATABASE}     # Optional: Create a default database
+      MYSQL_USER: ${DB_USER}             # Optional: Create a default user
+      MYSQL_PASSWORD: ${DB_PASS}     # Optional: Set password for the default user
+    ports:
+      - "127.0.0.1:3306:3306" # Maps host port 3306 to container port 3306
+    volumes:
+      - ./data/mariadb:/var/lib/mysql # Persist data outside the container
+    restart: unless-stopped
+    networks:
+      - yggdrasil
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASS}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 networks:
   yggdrasil:

