@@ -9,3 +9,4 @@ agent
 venv/
 .env
 mariadb/
+tables.sql

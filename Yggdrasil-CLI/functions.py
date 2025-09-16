@@ -1,13 +1,9 @@
-# import redis
-# import requests
-#import yaml
-#import time
 import os
 from sqlalchemy import create_engine, text
 import csv
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-
+import redis
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -19,6 +15,8 @@ RESET = "\033[0m"
 script_dir = os.path.dirname(os.path.abspath(__file__))
 #db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
 history_csv = os.path.join(script_dir, "history.csv")
+r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
+
 
 if not os.path.exists(history_csv):
     with open('history.csv', 'w', newline='') as file:
@@ -92,3 +90,42 @@ def csv_history(profile, ip, command):
     with open('history.csv', 'a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([profile, ip, command, time])
+
+def sub_listener(output_keys):
+    try: 
+        keys = set(output_keys.keys())
+        pubsub = r.pubsub(ignore_subscribe_messages=True)
+        pubsub.subscribe(*output_keys.keys())
+        for output in pubsub.listen():
+            channel = output['channel'].decode('utf-8')
+            data = output['data']
+
+            # Process the actual message
+            if channel in keys:
+                try:
+                    print(f"\n{GREEN}{output_keys[channel]}:\n{RESET}{data.decode('utf-8')}\n")
+                    pubsub.unsubscribe(channel)
+                    
+                except:
+                    print(data)
+                finally:
+                    keys.remove(channel)
+            
+            if not keys:
+                print(f"{CYAN}=============== All Output Received ==============={RESET}\n")
+                break
+        pubsub.close()
+    except:
+        pubsub = r.pubsub(ignore_subscribe_messages=True)
+        pubsub.subscribe(output_keys)
+        for output in pubsub.listen():
+            try: 
+                channel = output['channel'].decode('utf-8')
+                data = output['data']
+                print(f"\n{data.decode('utf-8')}")
+                
+            except:
+                print(f"\n{data}")
+            break
+        pubsub.unsubscribe(channel)
+        pubsub.close()

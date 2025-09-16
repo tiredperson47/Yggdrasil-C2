@@ -51,7 +51,7 @@ def commander():
         data = request.data
         if uuid and data:
             key = f"{uuid}-output"
-            r.rpush(key, data)
+            r.publish(key, data)
         return "Success"
     else:
         return "Invalid Method"

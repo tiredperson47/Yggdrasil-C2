@@ -6,6 +6,7 @@ import yaml
 from functions import *
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+import threading
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -61,6 +62,12 @@ except:
 
 # Sends agent commands to the Gunicorn/flask app HTTP listener at /admin
 def send_cmd(id, cmd):
+    key = f"{os.getenv('UUID')}-output"
+    raw_cmd = cmd.split(" ", 1) # get the command (first word)
+    if raw_cmd[0] not in null_output:
+        thread = threading.Thread(target=sub_listener, args=(key,))
+        thread.start()
+
     try:
         json_payload = {"uuid": id, "command": cmd}
         response = requests.post(url, json=json_payload, headers=header)
@@ -68,23 +75,9 @@ def send_cmd(id, cmd):
     except:
         print(f"{RED}ERROR: Failed to send. Is HTTP Listener running?{RESET}")
         return
-    
-    raw_cmd = cmd.split(" ", 1) # get the command (first word)
-    if raw_cmd[0] in null_output:
-        return
-    elif response.status_code == 200:
-        key = f"{os.getenv('UUID')}-output"
-        while True: # Wait for the output to appear at <uuid>-output
-            if r.exists(key):
-                output = r.rpop(key) # prints last index and deletes last index
-                try:
-                    print(output.decode('utf-8'))
-                except: 
-                    print(output)
-                break
-            else:
-                time.sleep(1)
-                continue
+
+    if raw_cmd[0] not in null_output and thread is not None:
+        thread.join()
 
 
 def agents(*agrs):
@@ -154,7 +147,7 @@ def delete(bruh):
                 print(f'{CYAN}Skipping:{RESET} {name}')
         else:
             r.delete(uuid)
-            r.delete(f"{uuid}-output")
+            # r.delete(f"{uuid}-output")
             if os.getenv('UUID') and uuid == os.getenv('UUID'):
                 os.environ['UUID'] = ""
                 os.environ['NAME'] = ""
@@ -252,44 +245,30 @@ def mass(bruh):
     output_keys = {}
 
     for i in range(len(agent_index)):
-        uuid = result[agent_index[i]][0]
-        name = result[agent_index[i]][1]
+        output_keys[f"{result[agent_index[i]][0]}-output"] = result[agent_index[i]][1]   # creates {<uuid>-output: name}
+
+    # handles commands that don't return outputs. 
+    cmd = command.split(" ", 1)
+    
+    if cmd[0] not in null_output:
+        thread = threading.Thread(target=sub_listener, args=(output_keys,))
+        thread.start()
+    else:
+        print(f"\n{CYAN}=============== No Output Expected. Skipping... ==============={RESET}\n")
+
+    for i in range(len(agent_index)):
         try:
-            json_payload = {"uuid": uuid, "command": command}
+            json_payload = {"uuid": result[agent_index[i]][0], "command": command}
             response = requests.post(url, json=json_payload, headers=header)
             csv_history(result[agent_index[i]][3], result[agent_index[i]][4], command)
         except:
             print(f"{RED}ERROR: Failed to send. Is HTTP Listener running?{RESET}")
             return
-        output_keys[name] = f"{uuid}-output"
+        
+    if cmd[0] not in null_output and thread is not None:
+        thread.join()
+    
 
-    # handles commands that don't return outputs. 
-    cmd = command.split(" ", 1)
-    if cmd[0] in null_output:
-        print(f"{CYAN}=============== No Output Expected. Skipping... ==============={RESET}\n")
-        return
-
-    while True:
-        remove = []
-        for name, key in output_keys.items():
-            if r.exists(key):
-                output = r.rpop(key)
-                try:
-                    print(f"{GREEN}{name}:\n{RESET}{output.decode('utf-8')}\n")
-                    remove.append(name)
-                except:
-                    print(output)
-                    remove.append(name)
-
-        for name in remove:
-            del output_keys[name]
-
-        if not output_keys:
-            print(f"{CYAN}=============== All Output Received ==============={RESET}\n")
-            break
-
-        time.sleep(1)
-
-
+    
 def lshell(command):
     os.system(command)
