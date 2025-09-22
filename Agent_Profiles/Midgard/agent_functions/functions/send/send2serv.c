@@ -61,6 +61,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
 
     // Ensures all data is sent. Only problem is this is synchronous/blocking and doesn't take advantage of io_uring's advantage in perform asynchronous tasks. 
     size_t sent = 0;
+    int ret;
     while (sent < len) {
         struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
         io_uring_prep_send(sqe, sockfd, buf + sent, len - sent, 0);
@@ -68,7 +69,7 @@ int send2serv(const char *uuid, const char *buf, size_t len) {
 
         struct io_uring_cqe *cqe;
         io_uring_wait_cqe(&ring, &cqe);
-        int ret = cqe->res;
+        ret = cqe->res;
         io_uring_cqe_seen(&ring, cqe);
 
         if (ret <= 0) return ret;

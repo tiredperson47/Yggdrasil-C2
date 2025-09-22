@@ -1,10 +1,8 @@
-import requests
-import redis
-import sys
 from commands import *
 import os
 import yaml
 from functions import *
+import threading
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -29,6 +27,8 @@ server_command = {
     "lshell": lshell,
 }
 
+thread = threading.Thread(target=redis_listener, daemon=True)
+thread.start()
 
 logo = r"""
                         ⠤⣀⣀⣾⣷⡾⣿⣷⣀⢳⣿⣿⣿⣦⣆⡠⢀⣀⠀⠀⠀

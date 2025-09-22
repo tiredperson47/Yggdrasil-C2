@@ -6,8 +6,9 @@ CREATE TABLE IF NOT EXISTS agents (
     last_seen TIMESTAMP,
     sleep INT,
     profile VARCHAR(100),
-    ip VARCHAR(64)
+    ip VARCHAR(64),
+    hostname VARCHAR(255)
 );
 
-GRANT ALL PRIVILEGES ON yggdrasil.* TO 'yggdrasil'@'%' IDENTIFIED BY 'P22VoxS4ncVxpkmPcNxNLx1ULX1W';
+GRANT ALL PRIVILEGES ON yggdrasil.* TO 'yggdrasil'@'%' IDENTIFIED BY '6UvuUQoagtavA2zWn0MrgPpRxj5h8LB1';
 FLUSH PRIVILEGES;

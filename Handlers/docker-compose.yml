@@ -1,6 +1,6 @@
 services:
   flask_app:
-    container_name: yggdrasil-handler
+    container_name: Yggdrasil_Core
     build: ./Yggdrasil_Core
     ports:
       - "8000:8000"
@@ -10,9 +10,6 @@ services:
       - yggdrasil
     environment:
       REDIS_HOST: redis
-    # volumes:
-    #   # Maps ./data on the host to /app/data in the container
-    #   - ./data:/app/data
 
   redis:
     image: redis:latest

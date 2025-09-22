@@ -9,17 +9,14 @@ GREEN = "\033[1;92m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
-# script_dir = os.path.dirname(os.path.abspath(__file__))
-# db_path = os.path.join(script_dir, 'Handlers', 'data', 'agents.db')
-
 load_dotenv("Handlers/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')
-host = os.getenv('HOST')
+db_host = os.getenv('HOST')
 
 try:
-    URL = f"mysql+pymysql://{db_user}:{db_pass}@{host}:3306/{database}"
+    URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
     engine = create_engine(
         URL,
         pool_size=1, # keep 5 open connections ready
@@ -42,3 +39,6 @@ while True:
     except KeyboardInterrupt:
         print("\nQuitting Script...")
         break
+    except:
+        print(f"{RED}ERROR: Something wrong with Alive.py, OR waiting for .env to be copied{RESET}")
+        time.sleep(30)

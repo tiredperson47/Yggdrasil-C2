@@ -6,6 +6,6 @@
 #include "commands/ls/cmd_ls.h"
 #include "commands/cat/cmd_cat.h"
 #include "commands/env/cmd_env.h"
-#include "commands/execute_assembly/cmd_execute_assembly.h"
+#include "commands/shell/cmd_shell.h"
 
 #endif

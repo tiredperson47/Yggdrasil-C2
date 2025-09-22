@@ -45,7 +45,7 @@ def print_table():
     # # conn = sqlite3.connect(db_path)
     # cur = conn.cursor()
     with engine.begin() as conn:
-        sql_select = text("SELECT uuid, name, status, profile, ip FROM agents")
+        sql_select = text("SELECT uuid, name, status, profile, ip, hostname FROM agents")
         tmp = conn.execute(sql_select)
         result = tmp.fetchall()
 
@@ -58,11 +58,12 @@ def print_table():
     NAME_WIDTH = 25
     STATUS_WIDTH = 8
     PROFILE_WIDTH = 15
+    HOSTNAME_WIDTH = 25
     IP_WIDTH = 17
     # Add length of new columns here. Future implement: IP column
-    total_width = INDEX_WIDTH + NAME_WIDTH + STATUS_WIDTH + PROFILE_WIDTH + IP_WIDTH + 16
+    total_width = INDEX_WIDTH + NAME_WIDTH + STATUS_WIDTH + PROFILE_WIDTH + IP_WIDTH + HOSTNAME_WIDTH + 19
     print('=' * total_width)
-    print(f'| {"Index":^{INDEX_WIDTH}} | {"Agent Name":^{NAME_WIDTH}} | {"IP":^{IP_WIDTH}} | {"Profile":^{PROFILE_WIDTH}} | {"Status":^{STATUS_WIDTH}} |') # Print column headers and centers them. 
+    print(f'| {"Index":^{INDEX_WIDTH}} | {"Agent Name":^{NAME_WIDTH}} | {"Hostname":^{HOSTNAME_WIDTH}} | {"IP":^{IP_WIDTH}} | {"Profile":^{PROFILE_WIDTH}} | {"Status":^{STATUS_WIDTH}} |') # Print column headers and centers them. 
     print('=' * total_width)
 
     # print the table
@@ -73,12 +74,13 @@ def print_table():
         profile_cell = row[3].center(PROFILE_WIDTH)
         status_cell = row[2].center(STATUS_WIDTH)
         ip_cell = row[4].center(IP_WIDTH)
+        hostname_cell = row[5].center(HOSTNAME_WIDTH)
         if status == "DEAD":
-            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{ip_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {RED}{status_cell}{RESET} |")
+            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{hostname_cell}{RESET} | {CYAN}{ip_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {RED}{status_cell}{RESET} |")
         elif status == "ALIVE":
-            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{ip_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {GREEN}{status_cell}{RESET} |")
+            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{hostname_cell}{RESET} | {CYAN}{ip_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {GREEN}{status_cell}{RESET} |")
         else:
-            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{ip_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {status_cell} |")
+            print(f"| {index_cell} | {CYAN}{name_cell}{RESET} | {CYAN}{hostname_cell}{RESET} | {CYAN}{ip_cell}{RESET} | {CYAN}{profile_cell}{RESET} | {status_cell} |")
         print('-' * total_width)
 
     return result
@@ -89,7 +91,7 @@ def csv_history(profile, ip, command):
     time = utc.isoformat(" ", "seconds")
     with open('history.csv', 'a', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow([profile, ip, command, time])
+        writer.writerow([profile, ip, command, time]) #add hostname to headers
 
 def sub_listener(output_keys):
     try: 
@@ -129,3 +131,11 @@ def sub_listener(output_keys):
             break
         pubsub.unsubscribe(channel)
         pubsub.close()
+
+
+def redis_listener(): 
+    pubsub = r.pubsub(ignore_subscribe_messages=True)
+    pubsub.subscribe("new_agent")
+    for output in pubsub.listen():
+        data = output['data'].decode('utf-8')
+        print(f"\n{CYAN}New Agent Callback: {data}{RESET}")

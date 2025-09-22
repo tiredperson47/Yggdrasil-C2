@@ -9,14 +9,9 @@
 #include "functions/send/send2serv.h"
 
 void cmd_cat(struct io_uring *ring, int sockfd, const char *uuid, const char *input) {
-    size_t buffer_size = 8192; // Start with 8KB
-    char *output_buffer = malloc(buffer_size);
-
     struct io_uring_sqe *sqe;
     struct io_uring_cqe *cqe;
     int fd, ret;
-    off_t offset = 0;
-    size_t total = 0;
 
     sqe = io_uring_get_sqe(ring);
     io_uring_prep_openat(sqe, AT_FDCWD, input, O_RDONLY, 0);
@@ -31,19 +26,45 @@ void cmd_cat(struct io_uring *ring, int sockfd, const char *uuid, const char *in
         return;
     }
 
-    while (total < buffer_size - 1) {
+    char *buffer = NULL;
+    size_t CHUNK_SIZE = 4096;
+    size_t total = 0;
+    size_t capacity = 0;
+
+    while (true) {
+
+        if (total + CHUNK_SIZE > capacity) {
+            capacity = total + CHUNK_SIZE;
+            char *new_buffer = realloc(buffer, capacity);
+            if (!new_buffer) {
+                perror("realloc failed");
+                free(buffer);
+                close(fd);
+                return;
+            }
+            buffer = new_buffer;
+        }
+
+
         sqe = io_uring_get_sqe(ring);
-        io_uring_prep_read(sqe, fd, output_buffer + total, buffer_size - 1 - total, offset);
+        io_uring_prep_read(sqe, fd, buffer + total, CHUNK_SIZE, -1);
         io_uring_submit(ring);
         io_uring_wait_cqe(ring, &cqe);
         ret = cqe->res;
         io_uring_cqe_seen(ring, cqe);
         if (ret <= 0) break;
-        offset += ret;
         total += ret;
     }
 
-    output_buffer[total] = 0;
-    close(fd);
-    send2serv(uuid, output_buffer, buffer_size);
+    char *final_buffer = realloc(buffer, total + 1);
+    final_buffer[total] = '\0';
+
+    sqe = io_uring_get_sqe(ring);
+    io_uring_prep_close(sqe, fd);
+    io_uring_submit(ring);
+    io_uring_wait_cqe(ring, &cqe);
+    io_uring_cqe_seen(ring, cqe);
+
+    send2serv(uuid, final_buffer, total);
+    free(final_buffer);
 }
