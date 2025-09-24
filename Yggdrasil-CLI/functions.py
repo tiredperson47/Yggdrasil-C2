@@ -21,7 +21,7 @@ r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
 if not os.path.exists(history_csv):
     with open('history.csv', 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Agent', 'IP', 'Command', 'Time'])
+        writer.writerow(['Agent', 'IP', 'Hostname', 'Command', 'Time'])
 
 load_dotenv("../Handlers/.env")
 db_user = os.getenv('DB_USER')
@@ -86,12 +86,12 @@ def print_table():
     return result
 
 
-def csv_history(profile, ip, command):
+def csv_history(profile, ip, command, hostname):
     utc = datetime.now()
     time = utc.isoformat(" ", "seconds")
     with open('history.csv', 'a', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow([profile, ip, command, time]) #add hostname to headers
+        writer.writerow([profile, ip, hostname, command, time]) #add hostname to headers
 
 def sub_listener(output_keys):
     try: 

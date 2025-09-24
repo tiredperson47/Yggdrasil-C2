@@ -13,8 +13,8 @@
 #   -Wl,-Bdynamic: Tells the linker to revert to dynamic linking for any
 #                  subsequent default libraries (like libc).
 CC = gcc
-CFLAGS = -I./agent_functions -Wall -g -fsanitize=address -O3 -fstack-protector-strong -fPIE -D_FORTIFY_SOURCE=2 -fomit-frame-pointer
-LDFLAGS = -pie -Wl,-z,relro,-z,now -g -fsanitize=address -Wl,-Bstatic -luring -Wl,-Bdynamic
+CFLAGS = -I./agent_functions -Wall -s -O3 -fstack-protector-strong -fPIE -D_FORTIFY_SOURCE=2 -fomit-frame-pointer
+LDFLAGS = -pie -Wl,-z,relro,-z,now -s -Wl,-Bstatic -luring -Wl,-Bdynamic
 
 # 2. Files and Directories
 # ------------------------

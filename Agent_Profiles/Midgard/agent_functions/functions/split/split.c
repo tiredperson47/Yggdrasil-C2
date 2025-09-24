@@ -55,14 +55,3 @@ char **split(char *str, char delim, int count) {
 
     return args;
 }
-
-// int main() {
-//     char command[] = "shell bash script.sh";
-//     char **result = split(command, ' ', 2);
-//     for (int i = 0; result[i] != NULL; i++) {
-//             printf("args[%d]: %s\n", i, result[i]);
-//         }
-//     free(result);
-
-//     return 0;
-// }
