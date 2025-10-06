@@ -12,4 +12,4 @@ RUN pip install -r requirements.txt
 EXPOSE 8000
 
 # Define the command to run your Flask application
-CMD gunicorn --workers 4 --bind 0.0.0.0:8000 app:app
+CMD gunicorn --workers 4 --bind 0.0.0.0:8000 --certfile /app/certs/cert.pem --keyfile /app/certs/key.pem --log-level debug app:app

@@ -11,23 +11,22 @@ CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
 
-# Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
-script_dir = os.path.dirname(os.path.abspath(__file__))
-#db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
-history_csv = os.path.join(script_dir, "history.csv")
-r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
-
-
-if not os.path.exists(history_csv):
-    with open('history.csv', 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Agent', 'IP', 'Hostname', 'Command', 'Time'])
-
 load_dotenv("../Handlers/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')
 db_host = os.getenv('HOST')
+redis_host = os.getenv('REDIS_HOST')
+
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+history_csv = os.path.join(script_dir, "history.csv")
+r = redis.Redis(host=redis_host, port=6379, db=0, decode_responses=False)
+
+if not os.path.exists(history_csv):
+    with open('history.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Agent', 'IP', 'Hostname', 'Command', 'Time'])
 
 try:
     URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
@@ -42,8 +41,6 @@ except:
     print(f"{RED}Error connecting to MariaDB Platform!{RESET}")
 
 def print_table():
-    # # conn = sqlite3.connect(db_path)
-    # cur = conn.cursor()
     with engine.begin() as conn:
         sql_select = text("SELECT uuid, name, status, profile, ip, hostname FROM agents")
         tmp = conn.execute(sql_select)

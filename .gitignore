@@ -3,10 +3,13 @@ test/
 .vscode/
 *.o
 agents.db
-bruh.py
 history.csv
 agent
 venv/
 .env
 mariadb/
 tables.sql
+agent.h
+cert.pem
+key.pem
+cert.h

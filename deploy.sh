@@ -31,10 +31,18 @@ PASSDB=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
 /usr/bin/sed -i "s/\(DB_PASS=\).*/\1${PASSDB}/" Handlers/.env
 /usr/bin/sed -i "s/IDENTIFIED BY '[^']*'/IDENTIFIED BY '$PASSDB'/" tables.sql
 
-/usr/bin/sudo /usr/bin/apt install rlwrap liburing-dev mariadb-client-core -y
+/usr/bin/sudo /usr/bin/apt install rlwrap mariadb-client-core upx -y
+read -p "Do you want to install dependencies for the Midgard Agent? (y\n) " choice
+
+if [[ $choice == y || $choice == Y ]]; then
+    /usr/bin/sudo /usr/bin/apt install liburing-dev libmbedtls-dev -y
+fi
 
 
-cd Handlers/Yggdrasil_Core
+cd Handlers/Yggdrasil_Core/certs
+/usr/bin/openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365
+/usr/bin/python3 string.py cert.pem > ../../../Agent_Profiles/Midgard/agent_functions/functions/connection/cert.h
+cd ..
 /usr/bin/sudo /usr/bin/docker-compose up -d --build
 cd ..
 /usr/bin/sudo /usr/bin/docker cp .env Yggdrasil_Core:/app

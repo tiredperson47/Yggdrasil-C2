@@ -7,5 +7,6 @@
 #include "commands/cat/cmd_cat.h"
 #include "commands/env/cmd_env.h"
 #include "commands/shell/cmd_shell.h"
+#include "commands/cd/cmd_cd.h"
 
 #endif

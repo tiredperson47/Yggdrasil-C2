@@ -46,14 +46,14 @@ void format_mode(mode_t mode, char *str) {
     str[10] = '\0';
 }
 
-void cmd_ls(struct io_uring *ring, int sockfd, const char *uuid, const char *args) {
+void cmd_ls(request_t *req, int sockfd, const char *uuid, const char *args) {
     const char *path = (args != NULL && args[0] != '\0') ? args : ".";
     DIR *dir = opendir(path);
 
     if (dir == NULL) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Cannot access '%s': No such file or directory\n", path);
-        send2serv(uuid, error_msg, strlen(error_msg));
+        send2serv(req, uuid, error_msg, strlen(error_msg));
         return;
     }
 
@@ -123,11 +123,11 @@ void cmd_ls(struct io_uring *ring, int sockfd, const char *uuid, const char *arg
 
 
     if (current_len > 0) {
-        send2serv(uuid, output_buffer, current_len);
+        send2serv(req, uuid, output_buffer, current_len);
     } else {
         // Send something if the directory was empty
         const char *empty_msg = "Directory is empty.\n";
-        send2serv(uuid, empty_msg, strlen(empty_msg));
+        send2serv(req, uuid, empty_msg, strlen(empty_msg));
     }
 
     free(output_buffer);

@@ -6,6 +6,6 @@
 #include <liburing.h>
 #include "req_struct.h"
 
-int connection(struct io_uring *ring, request_t *req);
-char *send_get(struct io_uring *ring, request_t *req, const char *uuid, char *path, char *hostname);
+int connection(request_t *req);
+void cleanup_connection(request_t *req);
 #endif

