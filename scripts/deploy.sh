@@ -43,7 +43,7 @@ if [[ $choice == y || $choice == Y ]]; then
     /usr/bin/sudo /usr/bin/apt install liburing-dev libmbedtls-dev -y
 fi
 
-
+/usr/bin/mkdir -p ../Handlers/Yggdrasil_Core/certs
 cd ../Handlers/Yggdrasil_Core/certs
 /usr/bin/openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365 -subj "/C=US/ST=CA/O=./CN=$HOST"
 cd ../../
@@ -51,6 +51,7 @@ cd ../../
 /usr/bin/sudo /usr/bin/docker cp .env Yggdrasil_Core:/app
 cd ..
 /usr/bin/python3 scripts/string.py Handlers/Yggdrasil_Core/certs/cert.pem > Agent_Profiles/Midgard/agent_functions/functions/connection/cert.h
+/usr/bin/sed -i "s/127\.0\.0\.1/$HOST/g" Agent_Profiles/Midgard/agent_functions/functions/connection/connection.c
 
 echo ""
 echo "========================================="
@@ -61,5 +62,5 @@ done
 echo '[+] Database is healthy. Importing tables...'
 
 /usr/bin/sleep 10    # This is to make sure that mariadb database is fully set up before adding tables
-/usr/bin/sudo /usr/bin/docker exec -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil < ./tables.sql
+/usr/bin/sudo /usr/bin/docker exec -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil < scripts/tables.sql
 echo '[+] Done!'
