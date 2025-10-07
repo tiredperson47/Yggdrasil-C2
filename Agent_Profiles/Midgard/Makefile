@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -I./agent_functions -Wall -O3 -s -static-pie -fPIE
-LDFLAGS = -static-pie -fPIE -s -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto
+CFLAGS = -I./agent_functions -Wall -O3 -g -static-pie -fPIE
+LDFLAGS = -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto
 
 PACKER ?= upx
 

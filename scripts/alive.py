@@ -9,7 +9,7 @@ GREEN = "\033[1;92m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
-load_dotenv("Handlers/.env")
+load_dotenv("../Handlers/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')

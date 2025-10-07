@@ -142,7 +142,6 @@ int connection(request_t *req) {
 
 
 
-    // req->ring = ring; // Store the ring pointer for our callbacks
 
     // --- Part 2: Initialize mbedTLS ---
     mbedtls_ssl_init(&req->ssl);
@@ -152,19 +151,19 @@ int connection(request_t *req) {
     mbedtls_entropy_init(&req->entropy);
 
 
-    // const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
-    // int charset_len = strlen(charset);
+    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
+    int charset_len = strlen(charset);
 
-    // int str_len = 45 + 1;
-    // char str[str_len + 1];
-    // for (int i = 0; i < str_len; i++) {
-    //     int str_index = rand() % charset_len;
-    //     str[i] = charset[str_index];
-    // }
-    // str[str_len] = '\0';
+    int str_len = 45 + 1;
+    char str[str_len + 1];
+    for (int i = 0; i < str_len; i++) {
+        int str_index = rand() % charset_len;
+        str[i] = charset[str_index];
+    }
+    str[str_len] = '\0';
 
 
-    const char *pers = "bcuibjkdhc89g2ufbbjbewcbjwec";
+    const char *pers = str;
     if (mbedtls_ctr_drbg_seed(&req->ctr_drbg, mbedtls_entropy_func, &req->entropy, (const unsigned char *)pers, strlen(pers)) != 0) {
         fprintf(stderr, "mbedtls_ctr_drbg_seed failed\n");
         return -1;

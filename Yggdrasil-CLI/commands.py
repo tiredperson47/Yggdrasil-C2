@@ -39,6 +39,7 @@ database = os.getenv('DATABASE')
 db_host = os.getenv('HOST')
 redis_host = os.getenv('REDIS_HOST')
 ygg_core = os.getenv('YGG_CORE')
+ygg_core_port = os.getenv('YGG_CORE_PORT')
 
 # Create the agents.db file and table if it's not already created in the Listeners/http/ directory.
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +47,7 @@ db_path = os.path.join(script_dir, '..', 'Handlers', 'data', 'agents.db')
 
 # Connect to redis database. Redis stores Agent commands
 r = redis.Redis(host=redis_host, port=6379, db=0, decode_responses=False)
-url = f"https://{ygg_core}:8000/admin" # change later to proper port/ip/domain name
+url = f"https://{ygg_core}:{ygg_core_port}/admin"
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) # To hide warnings about self signed ssl
 
 header = {"Content-Type": "application/json"}

