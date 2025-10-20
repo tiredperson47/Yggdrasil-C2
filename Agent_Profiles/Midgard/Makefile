@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -I./agent_functions -Wall -O3 -g -static-pie -fPIE
-LDFLAGS = -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto
+LDFLAGS = -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto -lcjson
 
 PACKER ?= upx
 
@@ -16,19 +16,20 @@ OBJS = $(SRCS:.c=.o)
 all: agent pack shelf
 
 agent: $(OBJS)
-	$(CC) $(CFLAGS) -o $(NAME) $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o ../Compiled_Payloads/$(NAME) $^ $(LDFLAGS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 pack: agent
 	gcc -o ../Obfuscation/upx/upx_bytes ../Obfuscation/upx/upx_bytes.c
-	$(PACKER) $(NAME) -q -7
-	../Obfuscation/upx/upx_bytes $(NAME) $(NAME)
+	$(PACKER) ../Compiled_Payloads/$(NAME) -q -7
+	../Obfuscation/upx/upx_bytes ../Compiled_Payloads/$(NAME) ../Compiled_Payloads/$(NAME)
 
 shelf: agent
-	@../Obfuscation/shelf/build_shelf.sh $(ARCH) $(NAME)
+	@../Obfuscation/shelf/build_shelf.sh $(ARCH) ../Compiled_Payloads/$(NAME)
+
 
 .PHONY: clean
 clean:
-	rm -f $(NAME) $(OBJS) ../Obfuscation/shelf-arm/agent.h
+	rm -f ../Compiled_Payloads/$(NAME) $(OBJS) ../Obfuscation/shelf-arm/agent.h

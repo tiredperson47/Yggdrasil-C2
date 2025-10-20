@@ -1,0 +1,6 @@
+[mysqld]
+ssl-ca = /etc/mysql/ssl/ca.crt
+ssl-cert = /etc/mysql/ssl/nginx.crt
+ssl-key = /etc/mysql/ssl/nginx.key
+
+require_secure_transport = ON 

@@ -1,21 +1,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <liburing.h>
 #include "functions/send/send2serv.h"
 #include "functions/read_file/read_file.h"
 
 
-void cmd_env(request_t *req, int sockfd, const char *uuid, const char *arg) { //arg is unused. Just a dummy place holder. 
+void cmd_env(request_t *req, int sockfd, const profile_t *profile, const char *arg) { 
     // size_t buffer_size;
+    (void)arg;  //arg is unused. Just a dummy place holder. 
     char *output_buffer = read_file(req->ring, "/proc/self/environ");
     if (output_buffer == NULL) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Unable to read environmental variables at /proc/self/environ...\n");
-        send2serv(req, uuid, error_msg, strlen(error_msg));
+        send2serv(req, profile, error_msg, strlen(error_msg));
         return;
     }
 
@@ -38,7 +35,7 @@ void cmd_env(request_t *req, int sockfd, const char *uuid, const char *arg) { //
         current_ptr += strlen(current_ptr) + 1;
     }
 
-    send2serv(req, uuid, final_string, strlen(final_string));
+    send2serv(req, profile, final_string, strlen(final_string));
     free(output_buffer);
     free(final_string);
 }

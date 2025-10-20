@@ -4,17 +4,12 @@ import yaml
 from functions import *
 import threading
 
-RED = "\033[1;31m"
-GREEN = "\033[1;92m"
-DGRN = "\x1b[38;5;22m"
-CYAN = "\033[1;36m"
-RESET = "\033[0m"
-
 script_dir = os.path.dirname(os.path.abspath(__file__))
 profile_path = os.path.join(script_dir, '..', 'Agent_Profiles')
 
 server_command = {
     "agents": agents,
+    # "payloads": payloads,
     "uuid": uuid,
     "history": history,
     "clear": clear,
@@ -90,7 +85,7 @@ try:
         commands = config['commands']
 
         if cmd_input in commands:
-            send_cmd(os.getenv('UUID'), message_to_send) # if it's an agent side function, send it immediately.
+            send_cmd(os.getenv('UUID'), message_to_send) # if it's an agent side function, send it.
             
             if message_to_send == "exit": # exit will delete the agent uuid from redis
                 print(f"{CYAN}Killing UUID: {RESET}{os.getenv('UUID')}")
@@ -100,7 +95,6 @@ try:
 
         else:
             print(f"{RED}ERROR: Invalid command:{RESET} {cmd_input}")
-            continue
                     
 except KeyboardInterrupt:
     print("\nServer shutting down.")

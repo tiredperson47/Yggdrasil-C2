@@ -1,5 +1,4 @@
 import redis
-import requests
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from datetime import datetime, timezone
@@ -10,13 +9,23 @@ GREEN = "\033[1;92m"
 CYAN = "\033[1;36m"
 RESET = "\033[0m"
 
-r = redis.Redis(host=os.getenv('REDIS_HOST'), port=6379, db=0, decode_responses=True)
-
-load_dotenv()
+load_dotenv("/app/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')
 docker_db = os.getenv('DOCKER_DB')
+redis_host = os.getenv('REDIS_HOST')
+redis_user = os.getenv('REDIS_USER')
+redis_pass = os.getenv('REDIS_PASS')
+
+r = redis.Redis(
+    host=redis_host,
+    port=6379, 
+    db=0,
+    decode_responses=True,
+    username="default",
+    password=redis_pass,
+    )
 
 if docker_db == "True" or docker_db == "true":
     db_host = "mariadb"
@@ -25,10 +34,17 @@ elif docker_db == "False" or docker_db == "false":
 else:
     db_host = "mariadb"
 
+sql_ssl = {
+    'ssl_ca': "certs/ca.crt",
+    'ssl_cert': "certs/client.crt",
+    'ssl_key': "certs/client.key"
+}
+
 try:
     URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
     engine = create_engine(
         URL,
+        connect_args={"ssl": sql_ssl},
         pool_size=5, # keep 5 open connections ready
         max_overflow=10, # allow up to 10 extra if demand spikes
         pool_recycle=1800, # recycle connections after 30 min
@@ -37,7 +53,8 @@ try:
 except:
     print(f"{RED}Error connecting to MariaDB Platform!{RESET}")
 
-def register_agent(uuid, profile, ip, hostname):
+
+def register_agent(uuid, profile, ip, hostname, user):
     if not hostname:
         hostname = ""
 
@@ -46,9 +63,8 @@ def register_agent(uuid, profile, ip, hostname):
     utc = datetime.now(timezone.utc)
     checkin = utc.strftime("%Y-%m-%d %H:%M:%S")
     with engine.begin() as conn:
-        # Future implement (maybe): read a yaml/json file for the default sleep int. Or Some other work around
-        sql_insert = text("INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep, profile, ip, hostname) VALUES (:uuid, :name, :status, :first_seen, :last_seen, :sleep, :profile, :ip, :hostname)")
-        conn.execute(sql_insert, {"uuid": uuid, "name": uuid, "status": "ALIVE", "first_seen": checkin, "last_seen": checkin, "sleep": 10, "profile": profile, "ip": ip, "hostname": hostname})
+        sql_insert = text("INSERT INTO agents (uuid, name, status, first_seen, last_seen, sleep, profile, ip, hostname, user) VALUES (:uuid, :name, :status, :first_seen, :last_seen, :sleep, :profile, :ip, :hostname, :user)")
+        conn.execute(sql_insert, {"uuid": uuid, "name": uuid, "status": "ALIVE", "first_seen": checkin, "last_seen": checkin, "sleep": 10, "profile": profile, "ip": ip, "hostname": hostname, "user": user})
     return ""
 
 # Check and process small commands. (exit, sleep, etc)

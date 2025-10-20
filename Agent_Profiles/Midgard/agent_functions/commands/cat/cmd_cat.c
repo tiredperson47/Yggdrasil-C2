@@ -2,27 +2,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <time.h>
 #include <liburing.h>
 #include "functions/send/send2serv.h"
 
-void cmd_cat(request_t *req, int sockfd, const char *uuid, const char *input) {
+void cmd_cat(request_t *req, int sockfd, const profile_t *profile, const char *file) {
     struct io_uring_sqe *sqe;
     struct io_uring_cqe *cqe;
     int fd, ret;
 
     sqe = io_uring_get_sqe(req->ring);
-    io_uring_prep_openat(sqe, AT_FDCWD, input, O_RDONLY, 0);
+    io_uring_prep_openat(sqe, AT_FDCWD, file, O_RDONLY, 0);
     io_uring_submit(req->ring);
     io_uring_wait_cqe(req->ring, &cqe);
     fd = cqe->res;
     io_uring_cqe_seen(req->ring, cqe);
     if (fd < 0) {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "Cannot access '%s': No such file/directory OR invalid permissions\n", input);
-        send2serv(req, uuid, error_msg, strlen(error_msg));
+        snprintf(error_msg, sizeof(error_msg), "Cannot access '%s': No such file/directory OR invalid permissions\n", file);
+        send2serv(req, profile, error_msg, strlen(error_msg));
         return;
     }
 
@@ -65,6 +62,6 @@ void cmd_cat(request_t *req, int sockfd, const char *uuid, const char *input) {
     io_uring_wait_cqe(req->ring, &cqe);
     io_uring_cqe_seen(req->ring, cqe);
 
-    send2serv(req, uuid, final_buffer, total);
+    send2serv(req, profile, final_buffer, total);
     free(final_buffer);
 }

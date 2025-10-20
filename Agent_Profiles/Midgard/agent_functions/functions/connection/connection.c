@@ -1,19 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <liburing.h>
-#include <errno.h>
 #include "req_struct.h"
 #include "functions/read_file/read_file.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/error.h"
-#include "mbedtls/x509_crt.h"
 #include "mbedtls/debug.h"
 #include "cert.h"
 
@@ -116,7 +108,7 @@ int connection(request_t *req) {
     io_uring_cqe_seen(req->ring, cqe);
 
 
-    // --- 4. Connect to the Server ---
+    //Connect to the Server
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
@@ -143,7 +135,7 @@ int connection(request_t *req) {
 
 
 
-    // --- Part 2: Initialize mbedTLS ---
+    // Initialize mbedTLS
     mbedtls_ssl_init(&req->ssl);
     mbedtls_ssl_config_init(&req->conf);
     mbedtls_x509_crt_init(&req->cacert);
@@ -169,15 +161,12 @@ int connection(request_t *req) {
         return -1;
     }
 
-    // --- Part 3: Load the Hardcoded Server Certificate ---
-    // The +1 includes the null terminator.
-    int ret = mbedtls_x509_crt_parse(&req->cacert, (const unsigned char *)SERVER_CERTIFICATE_PEM, strlen(SERVER_CERTIFICATE_PEM) + 1);
+    int ret = mbedtls_x509_crt_parse(&req->cacert, (const unsigned char *)SERVER_CERTIFICATE, strlen(SERVER_CERTIFICATE) + 1);
     if (ret < 0) {
          fprintf(stderr, "mbedtls_x509_crt_parse returned -0x%x\n", (unsigned int)-ret);
         return -1;
     }
 
-    // --- Part 4: Configure the SSL Context ---
     if (mbedtls_ssl_config_defaults(&req->conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0) {
         fprintf(stderr, "mbedtls_ssl_config_defaults failed\n");
         return -1;
@@ -207,7 +196,6 @@ int connection(request_t *req) {
     // Allow data to pass through
     mbedtls_ssl_set_bio(&req->ssl, req, tls_ring_send, tls_ring_recv, NULL);
 
-    // --- Part 6: Perform the TLS Handshake ---
     while ((ret = mbedtls_ssl_handshake(&req->ssl)) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
             fprintf(stderr, "mbedtls_ssl_handshake returned -0x%x\n", (unsigned int)-ret);
