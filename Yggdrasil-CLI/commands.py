@@ -9,7 +9,7 @@ import urllib3
 # Dictionary used for the help command. Add new SERVER SIDE commands here:
 server_command = {
     "agents": f"{CYAN}List all agents within database and select an agent to use by index{RESET}",
-    "payloads": f"{CYAN}List all compiled payloads{RESET}",
+    "hosted": f"{CYAN}List all hosted files on Nginx{RESET}",
     "build": f"{CYAN}Build a payload and host to HTTPS{RESET}",
     "uuid": f"{CYAN}List your current UUID{RESET}",
     "history": f"{CYAN}Get all commands sent to current Agent. Pulls from Redis database by UUID{RESET}",
@@ -220,9 +220,3 @@ def mass(bruh):
     
 def lshell(command):
     os.system(command)
-
-
-
-
-def payloads():
-    os.system("ls ../Agent_Profiles/Compiled_Payloads")

@@ -7,32 +7,38 @@ read -p "Server Public IP: " HOST
 DB_USER=yggdrasil
 DB_PASS=PASSWORD
 DATABASE=yggdrasil
-HOST=localhost
-DOCKER_DB=True                              # Is MariaDB on same docker network or no? (Default is True)
-REDIS_HOST=127.0.0.1
+DB_HOST=localhost
+DOCKER_DB=True                      # Is MariaDB on same docker network or no? (Default is True)
+REDIS_HOST=127.0.0.1                # Same IP as Nginx reverse proxy if being used
 REDIS_PASS=PASSWORD
-YGG_CORE=127.0.0.1                          # Yggdrasil_Core or Nginx reverse proxy IP/Domain
-YGG_CORE_PORT=8000                          # Yggdrasil_Core or Nginx reverse proxy Port
-ENDPOINT=/v3/api/admin                      # Endpoint for yggdrasil_core admin
+YGG_CORE=127.0.0.1                  # Yggdrasil_Core or Nginx reverse proxy IP/Domain
+YGG_CORE_PORT=8000                  # Yggdrasil_Core or Nginx reverse proxy Port
+ENDPOINT=/v3/api/admin              # Endpoint for yggdrasil_core admin
 EOF
 
 /usr/bin/cat << EOF > ./tables.sql
 CREATE TABLE IF NOT EXISTS agents (
-    uuid VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
+    uuid VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
     status VARCHAR(10),
     first_seen TIMESTAMP,
     last_seen TIMESTAMP,
     sleep INT,
-    profile VARCHAR(100),
-    ip VARCHAR(64),
+    profile VARCHAR(50),
+    ip VARCHAR(45),
     hostname VARCHAR(100),
-    user VARCHAR(100)
+    user VARCHAR(100),
+    compile_id VARCHAR(50) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS payloads (
-    uuid VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(100) NOT NULL
+    compile_id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    profile VARCHAR(100) NOT NULL,
+    created TIMESTAMP,
+    use_aes BOOLEAN NOT NULL DEFAULT TRUE,
+    private VARCHAR(1024),
+    public VARCHAR(1024)
 );
 
 GRANT ALL PRIVILEGES ON yggdrasil.* TO 'yggdrasil'@'%' IDENTIFIED BY 'NEW_PASSWORD' REQUIRE SSL;

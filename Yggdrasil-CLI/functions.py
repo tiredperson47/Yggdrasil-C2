@@ -18,7 +18,9 @@ DBLUE = "\x1b[38;5;33m"
 RESET = "\033[0m"
 
 parser = argparse.ArgumentParser(description='CLI for Yggdrasil C2')
-parser.add_argument('--config', type=str, default="../Handlers", help='Folder path of the "Handlers" directory. Ex. /home/user/Handlers')
+parser.add_argument('-c', '--config', type=str, default="../Handlers", help='Folder path of the "Handlers" directory. Ex. /home/user/Handlers')
+parser.add_argument('-n', '--no-nginx', action='store_false', help="Whether or not you're using an nginx reverse proxy or not (Default is True)")
+parser.add_argument('-r', '--redis', type=str, help="Specify Redis IP. Only use if --nginx is false. (Default is Yggdrasil_Core IP)")
 args = parser.parse_args()
 config = args.config.rstrip('/')
 
@@ -26,14 +28,20 @@ load_dotenv(f"{config}/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')
-db_host = os.getenv('HOST')
-redis_host = os.getenv('REDIS_HOST')
+db_host = os.getenv('DB_HOST')
 redis_user = os.getenv('REDIS_USER')
 redis_pass = os.getenv('REDIS_PASS')
 ygg_core = os.getenv('YGG_CORE')
 ygg_core_port = os.getenv('YGG_CORE_PORT')
 ygg_dir = os.getenv('ENDPOINT')
 
+if args.no_nginx == False and args.redis:
+    redis_host = args.redis
+elif args.no_nginx == True and args.redis:
+    print(f"{RED}ERROR: You don't need to specify redis host if it's behind a TCP reverse proxy{RESET}")
+    exit(1)
+else:
+    redis_host = ygg_core
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 history_csv = os.path.join(script_dir, "history.csv")
@@ -85,7 +93,7 @@ except:
 # Prints a nicely formatted table of agent callback information
 def print_table(table):
     with engine.begin() as conn:
-        sql_select = text(f"SELECT uuid, name, status, profile, ip, hostname, user FROM {table}")
+        sql_select = text(f"SELECT uuid, name, status, profile, ip, hostname, user FROM {table} ORDER BY first_seen ASC")
         tmp = conn.execute(sql_select)
         result = tmp.fetchall()
 
@@ -95,7 +103,7 @@ def print_table(table):
 
     # Print in a nicely formatted table. Unnecessary but visually better
     INDEX_WIDTH = 7
-    NAME_WIDTH = 25
+    NAME_WIDTH = 37
     STATUS_WIDTH = 8
     PROFILE_WIDTH = 15
     HOSTNAME_WIDTH = 25
@@ -200,7 +208,7 @@ null_output = [
 
 url = f"https://{ygg_core}:{ygg_core_port}{ygg_dir}"
 # Send command to Yggdrasil_Core for processing
-def send_cmd(id, cmd):
+def send_cmd(uuid, cmd):
     key = f"{os.getenv('UUID')}-output"
     raw_cmd = cmd.split(" ", 1) # get the command (first word)
     if raw_cmd[0] not in null_output:
@@ -208,7 +216,7 @@ def send_cmd(id, cmd):
         thread.start()
 
     try:
-        json_payload = {"uuid": id, "command": cmd}
+        json_payload = {"uuid": uuid, "command": cmd}
         response = requests.post(url, verify=False, json=json_payload, headers=header)
         csv_history(os.getenv('PROFILE'), os.getenv('IP'), cmd, os.getenv('HOSTNAME'))
     except:

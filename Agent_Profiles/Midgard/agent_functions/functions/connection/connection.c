@@ -4,10 +4,11 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <liburing.h>
-#include "req_struct.h"
+#include "structs.h"
 #include "functions/read_file/read_file.h"
 #include "mbedtls/debug.h"
 #include "cert.h"
+#include <time.h>
 
 #define HOST "127.0.0.1"
 #define PORT 8000
@@ -142,7 +143,7 @@ int connection(request_t *req) {
     mbedtls_ctr_drbg_init(&req->ctr_drbg);
     mbedtls_entropy_init(&req->entropy);
 
-
+    srand(time(NULL));
     const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
     int charset_len = strlen(charset);
 

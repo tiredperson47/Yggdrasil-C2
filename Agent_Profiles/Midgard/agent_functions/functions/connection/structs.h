@@ -29,6 +29,11 @@ typedef struct {
     char *user;
     char *method;
     char *agent;
+    char *compile_id;
+    char *key;
+    char *iv;
+    int *reg;
+    int *aes;
 } profile_t;
 
 #endif

@@ -7,6 +7,7 @@ if [[ $choice == y || $choice == Y ]] then
     /usr/bin/sudo /usr/bin/docker container prune
     /usr/bin/sudo /usr/bin/docker builder prune
     /usr/bin/sudo /usr/bin/docker network prune
+    /usr/bin/sudo /usr/bin/docker image prune
     /usr/bin/sudo rm -r ../Handlers/mariadb/data
 else
     echo "[!] Quitting script..."

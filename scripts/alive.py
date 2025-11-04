@@ -13,12 +13,20 @@ load_dotenv("../Handlers/.env")
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
 database = os.getenv('DATABASE')
-db_host = os.getenv('HOST')
+db_host = os.getenv('DB_HOST')
+
+path = "../Handlers/nginx/certs"
+sql_ssl = {
+    'ssl_ca': f"{path}/ca.crt",
+    'ssl_cert': f"{path}/client.crt",
+    'ssl_key': f"{path}/client.key"
+}
 
 try:
     URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:3306/{database}"
     engine = create_engine(
         URL,
+        connect_args={"ssl": sql_ssl},
         pool_size=1, # keep 5 open connections ready
         max_overflow=3, # allow up to 10 extra if demand spikes
         pool_recycle=1800, # recycle connections after 30 min

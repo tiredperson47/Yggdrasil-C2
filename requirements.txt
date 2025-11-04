@@ -6,3 +6,4 @@ pyyaml
 sqlalchemy
 pymysql
 python-dotenv
+cryptography
