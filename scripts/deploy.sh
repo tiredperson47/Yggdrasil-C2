@@ -2,16 +2,25 @@
 
 read -p "Server Public IP: " HOST
 
+
+# Generate random DB password.
+PASSDB=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+# /usr/bin/sed -i "s/\(DB_PASS=\).*/\1${PASSDB}/" ../Handlers/.env
+# /usr/bin/sed -i "s/IDENTIFIED BY '[^']*'/IDENTIFIED BY '$PASSDB'/" tables.sql
+REDIS=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+# /usr/bin/sed -i "s/\(REDIS_PASS=\).*/\1${REDIS}/" ../Handlers/.env
+HEALTHCHECK=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+
 # Create necessary files
 /usr/bin/cat << EOF > ../Handlers/.env
 DB_USER=yggdrasil
-DB_PASS=PASSWORD
+DB_PASS=${PASSDB}
 DATABASE=yggdrasil
 DB_HOST=localhost
 DOCKER_DB=True                      # Is MariaDB on same docker network or no? (Default is True)
-REDIS_HOST=127.0.0.1                # Same IP as Nginx reverse proxy if being used
-REDIS_PASS=PASSWORD
-YGG_CORE=127.0.0.1                  # Yggdrasil_Core or Nginx reverse proxy IP/Domain
+REDIS_HOST=${HOST}                  # Same IP as Nginx reverse proxy if being used
+REDIS_PASS=${REDIS}
+YGG_CORE=${HOST}                    # Yggdrasil_Core or Nginx reverse proxy IP/Domain
 YGG_CORE_PORT=8000                  # Yggdrasil_Core or Nginx reverse proxy Port
 ENDPOINT=/v3/api/admin              # Endpoint for yggdrasil_core admin
 EOF
@@ -41,13 +50,28 @@ CREATE TABLE IF NOT EXISTS payloads (
     public VARCHAR(1024)
 );
 
-GRANT ALL PRIVILEGES ON yggdrasil.* TO 'yggdrasil'@'%' IDENTIFIED BY 'NEW_PASSWORD' REQUIRE SSL;
+GRANT ALL PRIVILEGES ON yggdrasil.* TO 'yggdrasil'@'%' IDENTIFIED BY '${PASSDB}' REQUIRE SSL;
+
+DROP USER IF EXISTS 'healthcheck'@'localhost';
+CREATE USER 'healthcheck'@'localhost' IDENTIFIED BY '${HEALTHCHECK}';
+GRANT USAGE ON *.* TO 'healthcheck'@'localhost';
 FLUSH PRIVILEGES;
 EOF
+
+/usr/bin/cat << EOF > ../Handlers/mariadb/health.cnf
+[client]
+user=healthcheck
+password=${HEALTHCHECK}
+socket=/var/run/mysqld/mysqld.sock
+EOF
+
+/usr/bin/chmod 600 ../Handlers/.env ../Handlers/mariadb/health.cnf tables.sql
 
 /usr/bin/mkdir -p ../Handlers/nginx/certs
 /usr/bin/mkdir -p ../Handlers/mariadb/certs
 /usr/bin/mkdir -p ../Handlers/Yggdrasil_Core/certs
+/usr/bin/mkdir -p ../Agent_Profiles/Compiled_Payloads
+
 /usr/bin/cat << EOF > ../Handlers/nginx/certs/openssl.cnf
 [ v3_ca ]
 subjectKeyIdentifier = hash
@@ -68,17 +92,10 @@ extendedKeyUsage = clientAuth
 
 [ alt_names_nginx ]
 DNS.1 = localhost
+DNS.2 = mariadb
 IP.1 = 127.0.0.1
-IP.2 = IP
+IP.2 = ${HOST}
 EOF
-
-
-# Generate random DB password.
-PASSDB=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
-/usr/bin/sed -i "s/\(DB_PASS=\).*/\1${PASSDB}/" ../Handlers/.env
-/usr/bin/sed -i "s/IDENTIFIED BY '[^']*'/IDENTIFIED BY '$PASSDB'/" tables.sql
-REDIS=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
-/usr/bin/sed -i "s/\(REDIS_PASS=\).*/\1${REDIS}/" ../Handlers/.env
 
 
 
@@ -86,12 +103,21 @@ REDIS=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
 read -p "Do you want to install general dependencies (this will apt update)? (y\n) " depend
 if [[ $depend == y || $depend == Y ]]; then
     /usr/bin/sudo /usr/bin/apt update -y
-    /usr/bin/sudo /usr/bin/apt install rlwrap mariadb-client-core docker.io docker-compose -y
+    /usr/bin/sudo /usr/bin/apt install rlwrap mariadb-client-core docker.io docker-compose golang -y
 fi
 
 read -p "Do you want to install dependencies for the Midgard Agent? (y\n) " choice
 if [[ $choice == y || $choice == Y ]]; then
-    /usr/bin/sudo /usr/bin/apt install liburing-dev libmbedtls-dev libcjson-dev upx -y
+    /usr/bin/sudo /usr/bin/apt install liburing-dev libmbedtls-dev libcjson-dev upx cmake -y
+    /usr/bin/git clone https://github.com/DaveGamble/cJSON.git
+    cd cJSON
+    /usr/bin/mkdir build
+    cd build
+    /usr/bin/cmake .. -DENABLE_CJSON_UTILS=On -DENABLE_CJSON_TEST=Off -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=Off
+    /usr/bin/make
+    /usr/bin/sudo /usr/bin/make install
+    /usr/bin/sudo /usr/sbin/ldconfig
+    cd ../../
 fi
 
 
@@ -121,6 +147,15 @@ cd ../Handlers/nginx/certs
 /usr/bin/cp client.key ../../Yggdrasil_Core/certs
 cd ../../
 
+# Sed command to add nameserver 8.8.8.8 to /etc/resolv.conf (for go mod download)
+sudo sed -i '
+/^nameserver[[:space:]]\+8\.8\.8\.8$/d
+0,/^nameserver/{
+    /^nameserver/ i\
+nameserver 8.8.8.8
+}
+' /etc/resolv.conf
+
 
 # Build the infrastructure and modify public IP
 /usr/bin/sudo /usr/bin/docker-compose up -d --build
@@ -145,4 +180,5 @@ echo '[+] Database is healthy. Importing tables...'
 
 /usr/bin/sleep 10    # This is to make sure that mariadb database is fully set up before adding tables
 /usr/bin/sudo /usr/bin/docker exec -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil < scripts/tables.sql
+/usr/bin/rm scripts/tables.sql
 echo '[+] Done!'

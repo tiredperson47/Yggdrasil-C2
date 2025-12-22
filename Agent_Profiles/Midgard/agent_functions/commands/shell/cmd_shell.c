@@ -6,6 +6,7 @@
 #include "functions/send/send2serv.h"
 #include "functions/connection/connection.h"
 #include "functions/split/split.h"
+#include "functions/get_environ/get_environ.h"
 
 void cmd_shell(request_t *req, int sockfd, const profile_t *profile, const char *input) {
 
@@ -36,9 +37,11 @@ void cmd_shell(request_t *req, int sockfd, const profile_t *profile, const char 
             found_path = true;
         }
     } else {
-        char *path = getenv("PATH");
+        char *path = get_environ(req->ring, (char *)"PATH");
         if (path) {
             char *path_copy = strdup(path);
+            free(path);
+
             char *dir = strtok(path_copy, ":");
             while (dir != NULL) {
                 snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);

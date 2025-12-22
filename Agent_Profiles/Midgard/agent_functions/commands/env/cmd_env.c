@@ -22,7 +22,7 @@ void cmd_env(request_t *req, int sockfd, const profile_t *profile, const char *a
     // Special handling to make each environmental variable on a new line. 
     while (*current_ptr) {
         size_t current_len = strlen(current_ptr);
-        size_t new_size = strlen(final_string) + current_len + 2;
+        size_t new_size = strlen(final_string) + current_len + 2; // \n and null terminator
 
         char *tmp = realloc(final_string, new_size);
         if (tmp == NULL) {

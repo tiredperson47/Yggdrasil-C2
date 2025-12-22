@@ -13,3 +13,7 @@ tables.sql
 agent.h
 certs/
 cert.h
+health.cnf
+cJSON/
+Compiled_Payloads/
+*.bak

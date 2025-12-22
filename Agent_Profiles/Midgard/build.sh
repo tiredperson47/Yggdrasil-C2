@@ -7,12 +7,18 @@ UUID=$(/usr/bin/cat /proc/sys/kernel/random/uuid)
 TIME=$(/usr/bin/date -u +"%Y-%m-%d %H:%M:%S")
 /usr/bin/sed -i "s/\(profile->compile_id = strdup(\"\)[^\"]*\(\");\)/\1$UUID\2/" Midgard.c
 
-read -p "Enter the agent's name: " NAME
-read -p "Enter the callback IP: " IP
-read -p "Enter the callback port: " PORT
-read -p "Enter compile mode {agent, pack, shelf, all}: " MODE
-read -p "Use AES encryption? (y\n): " choice
-read -p "Enter the path to the Handlers directory (relative to this script): " path
+read -p "Enter the agent's name (Default is 'agent'): " NAME
+NAME=${NAME:-agent}
+read -p "Enter the callback IP (Default is 127.0.0.1): " IP
+IP=${IP:-127.0.0.1}
+read -p "Enter the callback port (Default is 8000): " PORT
+PORT=${PORT:-8000}
+read -p "Enter compile mode (Default is 'agent') {agent, pack, shelf, all}: " MODE
+MODE=${MODE:-agent}
+read -p "Use AES encryption? (Default is 'y') (y\n): " choice
+choice=${choice:-y}
+read -p "Enter the path to the Handlers directory (relative to this script) (Default is ../../Handlers): " path
+path=${path:-../../Handlers}
 
 if [[ "${choice,,}" == "y" ]]; then
     AES=1

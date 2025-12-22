@@ -5,7 +5,7 @@ NAME="$2"
     
 if [[ $ARCH == "arm" || $ARCH == "ARM" || $ARCH == "Arm" ]]; then
     xxd -n "agent" -i $NAME > ../Obfuscation/shelf/agent.h
-    gcc -static -pie -s -fPIE -Wall -o ./$NAME ../Obfuscation/shelf/nidavellir-arm.c
+    gcc -static -pie -g -fPIE -Wall -o ./$NAME ../Obfuscation/shelf/shelf.c
 elif [[ $ARCH == "amd" || $ARCH == "AMD" || $ARCH == "Amd" ]]; then
     xxd -n "agent" -i $NAME > ../Obfuscation/shelf/agent.h
     gcc -static -pie -s -fPIE -Wall -o ./$NAME ../Obfuscation/shelf/nidavellir-amd.c

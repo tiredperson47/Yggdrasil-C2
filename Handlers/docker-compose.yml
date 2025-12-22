@@ -16,6 +16,23 @@ services:
       - yggdrasil
     environment:
       REDIS_HOST: redis
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8000"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  http:
+    container_name: http_listener
+    build: ./Listeners/http
+    ports:
+      - "80"
+    depends_on:
+      yggdrasil_core:
+        condition: service_healthy
+    restart: always
+    networks:
+      - yggdrasil
 
   redis:
     image: redis:latest
@@ -41,11 +58,12 @@ services:
       - "3306"
     volumes:
       - ./mariadb/data:/var/lib/mysql
+      - ./mariadb/health.cnf:/root/.my.cnf:ro
     restart: always
     networks:
       - yggdrasil
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASS}"]
+      test: ["CMD-SHELL", "mariadb-admin ping --silent"]
       interval: 5s
       timeout: 5s
       retries: 10

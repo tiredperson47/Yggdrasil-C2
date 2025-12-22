@@ -24,15 +24,25 @@ typedef struct {
     ElfN_Ehdr* hdr;
 } loaded_elf_info;
 
-void jump_to(ElfN_Addr new_sp, void* entry) {
+__attribute__((noreturn))
+void jump_to(ElfN_Addr new_sp, void *entry, long argc, char **argv, char **envp) {
     asm volatile(
-        "mov sp, %0\n" // Set the new stack pointer.
-        "br %1\n"      // Branch to the entry point.
-        : // No output operands.
-        : "r"(new_sp), "r"(entry) // Input operands.
+        "mov sp, %0\n"
+        "mov x0, %1\n"   // argc
+        "mov x1, %2\n"   // argv
+        "mov x2, %3\n"   // envp
+        "br  %4\n"
+        :
+        : "r"(new_sp),
+          "r"(argc),
+          "r"(argv),
+          "r"(envp),
+          "r"(entry)
+        : "memory"
     );
-
+    __builtin_unreachable();
 }
+
 
 int is_image_valid(ElfN_Ehdr *hdr) {
     if (memcmp(hdr->e_ident, ELFMAG, SELFMAG) != 0) return 0;
@@ -68,9 +78,23 @@ void prepare_and_jump(loaded_elf_info* info, int argc, char **argv, char **envp)
     }
     ElfN_Addr* stack_top = (ElfN_Addr*)((char*)new_stack_base + stack_size);
 
+    ElfN_Phdr *phdr_copy = mmap(NULL,
+    
+        info->hdr->e_phnum * sizeof(ElfN_Phdr),
+    PROT_READ,
+    MAP_PRIVATE | MAP_ANONYMOUS,
+    -1, 0);
+
+    memcpy(phdr_copy,
+        elf_start + info->hdr->e_phoff,
+        info->hdr->e_phnum * sizeof(ElfN_Phdr));
+
+    
+
+
     ElfN_Addr auxv[18];
     int auxv_count = 0;
-    auxv[auxv_count++] = AT_PHDR;   auxv[auxv_count++] = info->pie_base + info->hdr->e_phoff;
+    auxv[auxv_count++] = AT_PHDR;   auxv[auxv_count++] = (ElfN_Addr)phdr_copy;
     auxv[auxv_count++] = AT_PHENT;  auxv[auxv_count++] = info->hdr->e_phentsize;
     auxv[auxv_count++] = AT_PHNUM;   auxv[auxv_count++] = info->hdr->e_phnum;
     auxv[auxv_count++] = AT_PAGESZ; auxv[auxv_count++] = sysconf(_SC_PAGESIZE);
@@ -105,7 +129,7 @@ void prepare_and_jump(loaded_elf_info* info, int argc, char **argv, char **envp)
     
     ElfN_Addr sp_val = (ElfN_Addr)stack_top & -16L;
     
-    jump_to(sp_val, info->entry_point);
+    jump_to(sp_val, info->entry_point, argc, argv, envp);
 }
 
 

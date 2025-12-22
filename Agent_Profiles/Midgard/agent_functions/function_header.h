@@ -7,5 +7,6 @@
 #include "functions/base64/base64.h"
 #include "functions/split/split.h"
 #include "functions/aes/aes.h"
+#include "functions/get_environ/get_environ.h"
 
 #endif

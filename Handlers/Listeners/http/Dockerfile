@@ -5,7 +5,6 @@ FROM golang:1.24-alpine AS builder
 
 # Install required build tools
 RUN apk add --no-cache \
-    ca-certificates \
     git
 
 WORKDIR /app
@@ -18,28 +17,23 @@ RUN go mod download
 COPY . .
 
 # Build static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o yggdrasil_core
+RUN CGO_ENABLED=0 GOOS=linux go build -o http
 
 # =========================
 # Runtime stage
 # =========================
 FROM alpine:3.20
 
-# Install CA certs for TLS (MariaDB + HTTPS)
-RUN apk add --no-cache ca-certificates
-
 WORKDIR /app
 
 # Copy binary
-COPY --from=builder /app/yggdrasil_core .
+COPY --from=builder /app/http .
 
-# Copy certs if used by the app
-COPY certs ./certs
 
 # Environment safety
 ENV GIN_MODE=release
 
 # Expose Gin port
-EXPOSE 8000
+EXPOSE 80
 
-CMD ["./yggdrasil_core"]
+CMD ["./http"]

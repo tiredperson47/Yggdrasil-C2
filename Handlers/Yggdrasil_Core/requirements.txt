@@ -1,9 +1,0 @@
-gunicorn
-flask
-requests
-redis
-pyyaml
-sqlalchemy
-python-dotenv
-pymysql
-cryptography

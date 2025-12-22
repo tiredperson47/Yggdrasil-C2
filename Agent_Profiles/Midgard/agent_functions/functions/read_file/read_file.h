@@ -3,6 +3,7 @@
 
 // Standard library includes that might be needed by the function declaration
 #include <stdlib.h>
+#include <liburing.h>
 
 char *read_file(struct io_uring *ring, const char *path);
 

