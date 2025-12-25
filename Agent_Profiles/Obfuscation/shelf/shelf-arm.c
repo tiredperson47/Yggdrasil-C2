@@ -21,16 +21,10 @@
 #define ElfN_Word Elf64_Word
 #define MAX_SEGMENTS 16
 
-typedef enum {
-    ARCH_X86_64,
-    ARCH_AARCH64
-} arch_t;
-
 typedef struct elf_info {
     void* entry_point;
     ElfN_Addr pie_base;
     ElfN_Ehdr* hdr;
-    arch_t arch;
 } elf_info;
 
 typedef struct load_segment {
@@ -52,19 +46,12 @@ static int prot_from_pflags(Elf64_Word flags) {
     return prot;
 }
 
-/*
- * Apply final memory protections for the loaded ELF image using a per-page union
- * of PT_LOAD permissions. This avoids bugs from overlapping mprotect() ranges.
- *
- * mapping: the base pointer returned by mmap() for the whole image
- * mapsz:   size of the mapping (load->memsz)
- * pie_base: info->pie_base
- * segs:    segments[] array
- * seg_count: number of PT_LOAD segments recorded
- */
-static int apply_segment_protections_union(void *mapping, size_t mapsz,
-                                           Elf64_Addr pie_base,
-                                           load_segment *segs, int seg_count, int allow_wx) {
+
+// Apply final memory protections for the loaded ELF image using a per-page union
+// of PT_LOAD permissions. This avoids bugs from overlapping mprotect() ranges.
+
+static int apply_segment_protections_union(void *mapping, size_t mapsz, Elf64_Addr pie_base, load_segment *segs, int seg_count, int allow_wx) {
+
     size_t page_size = (size_t)sysconf(_SC_PAGESIZE);
     size_t page_count = (mapsz + page_size - 1) / page_size;
 
@@ -74,7 +61,7 @@ static int apply_segment_protections_union(void *mapping, size_t mapsz,
         return 0;
     }
 
-    /* Mark each page with the union of perms of all segments that cover it */
+    // Mark each page with the union of perms of all segments that cover it
     for (int i = 0; i < seg_count; i++) {
         load_segment *seg = &segs[i];
 
@@ -89,8 +76,8 @@ static int apply_segment_protections_union(void *mapping, size_t mapsz,
         if (seg_start < map_start) seg_start = map_start;
         if (seg_end   > map_end)   seg_end   = map_end;
 
-        size_t p0 = (size_t)((seg_start - map_start) / page_size);
-        size_t p1 = (size_t)((seg_end   - map_start + page_size - 1) / page_size);
+        size_t p0 = (size_t)((seg_start - map_start) / page_size); // page start
+        size_t p1 = (size_t)((seg_end   - map_start + page_size - 1) / page_size); // page end
 
         int prot = prot_from_pflags(seg->flags);
         
@@ -100,13 +87,13 @@ static int apply_segment_protections_union(void *mapping, size_t mapsz,
         }
     }
 
-    /* Apply mprotect in runs of same prot */
+    // Apply mprotect in runs of same prot
     for (size_t p = 0; p < page_count; ) {
         int prot = page_prot[p];
-        if (prot == 0) prot = PROT_READ; /* avoid PROT_NONE by accident */
+        if (prot == 0) prot = PROT_READ; // avoid PROT_NONE by accident
 
         size_t run = 1;
-        while (p + run < page_count) {
+        while (p + run < page_count) {  // group consecutive pages with same prot
             int next = page_prot[p + run];
             if (next == 0) next = PROT_READ;
             if (next != prot) break;
@@ -116,7 +103,7 @@ static int apply_segment_protections_union(void *mapping, size_t mapsz,
         void *addr = (char *)mapping + p * page_size;
         size_t len = run * page_size;
 
-        if (mprotect(addr, len, prot) != 0) {
+        if (mprotect(addr, len, prot) != 0) {   // apply protection
             // perror("mprotect(union)");
             free(page_prot);
             return 0;
@@ -138,13 +125,7 @@ int is_image_valid(struct elf_info *info) {
         // printf("[-] Not ELFCLASS64\n");
         return 0;
     }
-    if (info->hdr->e_machine == EM_AARCH64) { // Check for ARM and x86_64
-        info->arch = ARCH_AARCH64;
-        // printf("[+] Arch: AARCH64\n");
-    } else if (info->hdr->e_machine == EM_X86_64) {
-        info->arch = ARCH_X86_64;
-        // printf("[+] Arch: X86_64\n");
-    } else {
+    if (info->hdr->e_machine != EM_AARCH64) { // Check for ARM and x86_64
         // printf("[-] Unsupported Architecture: %d\n", info->hdr->e_machine);
         return 0; 
     }
@@ -191,8 +172,8 @@ static size_t cstr_len(const char *s) {
     return s ? (strlen(s) + 1) : 0;
 }
 
-/* Copy string into the stack "string area" which grows downward.
-   Returns the new address of the copied string (inside the new stack mapping). */
+// Copy string into the stack "string area" which grows upwards.
+// Returns the new address of the copied string (inside the new stack mapping).
 static char *stack_copy_str(char **str_top, const char *src) {
     size_t n = cstr_len(src);
     if (n == 0) return NULL;
@@ -205,11 +186,12 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
     ElfN_Addr *orig_auxv = NULL;
 
-    /* envp is NULL-terminated */
+
+    // envp is NULL-terminated
     char **e = envp;
     while (*e) e++;
 
-    /* auxv starts immediately after envp NULL */
+    // auxv starts immediately after envp NULL 
     orig_auxv = (ElfN_Addr *)(e + 1);
 
 
@@ -232,6 +214,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
     int stack_prot = PROT_READ | PROT_WRITE;
     // Elf64_Addr relro_start = 0, relro_end = 0;
 
+    // Grab data from relevant program headers
     for (int i = 0; i < info->hdr->e_phnum; i++) {
         switch (phdr[i].p_type) {
             case PT_LOAD:
@@ -285,10 +268,10 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
         if (a && a > max_align) max_align = a;
     }
 
-    /* Some toolchains set p_align=0; be defensive */
+    // Some toolchains set p_align=0 to be defensive
     if (max_align < page_size) max_align = page_size;
 
-    /* Over-allocate so we can align inside */
+    // Over-allocate so we can align later
     size_t alloc_sz = load->memsz + max_align;
 
     char *mapping_raw = mmap(NULL, alloc_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -297,11 +280,12 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
         return 0;
     }
 
+    // Get the mapped memory region and align it
     uintptr_t raw = (uintptr_t)mapping_raw;
     uintptr_t aligned = (raw + (max_align - 1)) & ~(uintptr_t)(max_align - 1);
     char *mapping = (char *)aligned;
 
-    /* Keep mapping_raw around (don’t munmap prefix/suffix yet) */
+    // Keep mapping_raw around (don’t munmap prefix/suffix yet)
     info->pie_base = (Elf64_Addr)mapping - (Elf64_Addr)min_vaddr;
 
     // printf("[+] PIE Base: 0x%lx (raw=%p align=0x%zx alloc_sz=0x%zx)\n",info->pie_base, mapping_raw, max_align, alloc_sz);
@@ -326,6 +310,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
         }
     }
 
+    // Flush instruction cache
     __builtin___clear_cache((char *)mapping, (char *)mapping + load->memsz);
 
 
@@ -335,7 +320,9 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
     Elf64_Rela *rela_plt = NULL;
     size_t rela_plt_count = 0;
-    Elf64_Sxword plt_is_rela = 1; /* AArch64 uses RELA */
+    Elf64_Sxword plt_is_rela = 1; // AArch64 uses RELA
+
+    // Parse dynamic segment to find relocation tables
     for (int i = 0; i < info->hdr->e_phnum; i++) {
         if (phdr[i].p_type != PT_DYNAMIC)
             continue;
@@ -368,10 +355,11 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
             }
     }
     
-    // Apply relocations
+    // Apply dynamic relocations
     if (rela_dyn) {
         // printf("[+] Applying %zu .rela.dyn relocations\n", rela_dyn_count);
 
+        // Handle relative relocations
         for (size_t i = 0; i < rela_dyn_count; i++) {
             Elf64_Xword type = ELF64_R_TYPE(rela_dyn[i].r_info);
             Elf64_Addr *where = (Elf64_Addr *)(info->pie_base + rela_dyn[i].r_offset);
@@ -400,18 +388,17 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
         // Headroom for negative TP-relative accesses (your crash was 0x618 below)
         // Give it a page to be safe.
-        size_t headroom = 0x4000;     /* for negative TP offsets into pthread */
-        size_t tcb_size  = 0x2000;    /* fake pthread */
+        size_t headroom = 0x4000;     // for negative TP offsets into pthread
+        size_t tcb_size  = 0x2000;    // fake pthread
         size_t tls_size  = tls_phdr->p_memsz;
         size_t tls_align = tls_phdr->p_align ? tls_phdr->p_align : 16;
 
-        /* Put TLS immediately before TP, aligned */
+        // Put TLS immediately before TP, aligned
         size_t tls_area = (tls_size + tls_align - 1) & ~(tls_align - 1);
 
         size_t total = headroom + tls_area + tcb_size;
 
-        void *raw = mmap(NULL, total, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        void *raw = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         // if (raw == MAP_FAILED) { perror("mmap tls"); return 0; }
 
         uintptr_t base = (uintptr_t)raw;
@@ -421,11 +408,11 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
         void *tp = (void *)tp_u;
         void *tls_block = (void *)(tp_u - tls_area);
 
-        /* Copy TLS */
+        // Copy TLS
         memcpy(tls_block, (void *)(info->pie_base + tls_phdr->p_vaddr), tls_phdr->p_filesz);
         memset((char *)tls_block + tls_phdr->p_filesz, 0, tls_phdr->p_memsz - tls_phdr->p_filesz);
 
-        /* Optional self pointer */
+        // Optional self pointer
         *(void **)tp = tp;
 
         // printf("[+] TLS raw=%p tp=%p tls_block=%p (tls_area=0x%zx headroom=0x%zx)\n", raw, tp, tls_block, tls_area, headroom);
@@ -435,15 +422,15 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
 
 
-
+    // Apply RWX permissions
     if (!apply_segment_protections_union(mapping, load->memsz, info->pie_base, segments, seg_count, 1)) {
         // fprintf(stderr, "[-] Failed to apply segment protections\n");
         return 0;
     }
 
-    /* Apply deferred IRELATIVE in .rela.dyn now that text is executable */
+    /* Apply IRELATIVE relocations now that text is executable */
     if (rela_dyn) {
-        // printf("[+] Applying deferred .rela.dyn IRELATIVE relocations\n");
+        // printf("[+] Applying .rela.dyn IRELATIVE relocations\n");
         for (size_t i = 0; i < rela_dyn_count; i++) {
             Elf64_Xword type = ELF64_R_TYPE(rela_dyn[i].r_info);
             if (type != R_AARCH64_IRELATIVE) continue;
@@ -456,7 +443,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
         }
     }
 
-    /* Now that PROT_EXEC is applied to the text segment, we can call IFUNC resolvers */
+    // Call IFUNC resolvers to handle PLT relocations
     if (rela_plt) {
         if (plt_is_rela != DT_RELA) {
             // fprintf(stderr, "[-] Unexpected DT_PLTREL (expected DT_RELA)\n");
@@ -498,21 +485,20 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
     // Create the stack
     size_t stack_size = 3 * 1024 * 1024;
-    char *stack = mmap(NULL, stack_size,
-                    PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    char *stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     assert(stack != MAP_FAILED);
 
     char *stack_end = stack + stack_size;
 
-    /* Count envc */
+    // Count envc
     int envc = 0;
     for (char **p = envp; *p; ++p) envc++;
 
-    /* ---------- Build AUXV (curated) ---------- */
+    // Build AUXV
     ElfN_Addr new_auxv[256];
     int auxc = 0;
 
+    // Macro to push key-value pairs onto new_auxv
     #define AUX_PUSH(k,v) do { \
         if (auxc + 2 >= (int)(sizeof(new_auxv)/sizeof(new_auxv[0]))) { \
             /*fprintf(stderr, "auxv overflow\n");*/ \
@@ -561,55 +547,55 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
     if (at_hwcap2) AUX_PUSH(AT_HWCAP2, at_hwcap2);
     if (at_clktck) AUX_PUSH(AT_CLKTCK, at_clktck);
 
-    /* We will add AT_RANDOM / AT_EXECFN / AT_PLATFORM / AT_SYSINFO_EHDR then AT_NULL */
-
-    /* ---------- Reserve pointer table area (exact, alignment-safe) ---------- */
-    /* Reserve enough for: argc + argv + NULL + envp + NULL + auxv + extra auxv entries */
+    // Reserve space for extra auxv entries we will add later
     size_t extra_aux_words = 2 /*AT_RANDOM*/ + 2 /*AT_EXECFN*/ + 2 /*AT_PLATFORM (optional)*/ + 2 /*AT_SYSINFO_EHDR (optional)*/ + 2 /*AT_NULL*/;
     size_t ptr_words = 1 + (size_t)argc + 1 + (size_t)envc + 1 + (size_t)auxc + extra_aux_words;
 
+    // Align pointer table size to 16 bytes
     size_t ptr_bytes = ptr_words * sizeof(ElfN_Addr);
     ptr_bytes = (ptr_bytes + 15) & ~(size_t)15;
 
     uintptr_t ptr_base_unaligned = (uintptr_t)stack_end - ptr_bytes;
     uintptr_t ptr_base = ptr_base_unaligned & ~(uintptr_t)0xFULL;
 
-    /* IMPORTANT: define ptr_top relative to ptr_base so reservation size is preserved */
+    // Define ptr_top relative to ptr_base so reservation size is preserved
     char *ptr_base_p = (char *)ptr_base;
     char *ptr_top_p  = ptr_base_p + ptr_bytes;
 
-    /* Strings go below ptr_base */
+    // Strings go below ptr_base
     char *str_top = ptr_base_p;
 
-    /* ---------- Copy strings (argv/envp/execfn/platform/random) ---------- */
+    // Copy argv strings
     char **new_argv = alloca(sizeof(char*) * (argc + 1));
     for (int i = 0; i < argc; i++) new_argv[i] = stack_copy_str(&str_top, argv[i]);
     new_argv[argc] = NULL;
 
+    // Copy envp strings
     char **new_envp = alloca(sizeof(char*) * (envc + 1));
     for (int i = 0; i < envc; i++) new_envp[i] = stack_copy_str(&str_top, envp[i]);
     new_envp[envc] = NULL;
 
+    // fill out other auxv entries
     char *new_execfn = stack_copy_str(&str_top, argv[0]);
 
     char *new_platform = NULL;
     if (at_platform) new_platform = stack_copy_str(&str_top, (const char *)at_platform);
 
-    /* align for AT_RANDOM */
+    // Align for AT_RANDOM
     str_top = (char *)((uintptr_t)str_top & ~0xFULL);
 
     uint8_t *randbuf = (uint8_t *)(str_top - 16);
-    str_top = (char *)randbuf;
+    str_top = (char *)randbuf;  // add AT_RANDOM string space
     syscall(__NR_getrandom, randbuf, 16, 0);
 
-    /* finalize auxv */
+    // Finalize auxv
     AUX_PUSH(AT_RANDOM, (ElfN_Addr)randbuf);
     AUX_PUSH(AT_EXECFN, (ElfN_Addr)new_execfn);
     if (new_platform) AUX_PUSH(AT_PLATFORM, (ElfN_Addr)new_platform);
     if (at_sysinfo_ehdr) AUX_PUSH(AT_SYSINFO_EHDR, at_sysinfo_ehdr);
     AUX_PUSH(AT_NULL, 0);
 
-    /* ---------- Write pointer table linearly ---------- */
+    // Write pointer table linearly
     ElfN_Addr *sp = (ElfN_Addr *)ptr_base_p;
     ElfN_Addr *out = sp;
 
@@ -624,7 +610,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
     memcpy(out, new_auxv, (size_t)auxc * sizeof(ElfN_Addr));
     out += auxc;
 
-    /* bounds + alignment checks */
+    // bounds + alignment checks
     if ((char *)out > ptr_top_p) {
         // fprintf(stderr, "stack pointer table overflow\n");
         _exit(1);
@@ -637,10 +623,8 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
     mprotect(stack, stack_size, stack_prot);
     // printf("[+] Stack Pointer: %p\n", sp);
 
-    /* debug sanity (remove later) */
     // fprintf(stderr, "argc=%lu argv0=%s envp0=%s\n", (unsigned long)sp[0], (char *)sp[1], (char *)(sp + 1 + argc + 1)[0]);
 
-    /* Jump like the kernel: only SP matters for glibc _start */
     arm_jump((ElfN_Addr)sp, info->entry_point);
     
     return 1; // Unreachable

