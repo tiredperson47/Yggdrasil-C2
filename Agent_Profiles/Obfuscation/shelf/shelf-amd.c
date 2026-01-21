@@ -4,6 +4,7 @@
 #include <elf.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <asm/prctl.h>
 #include <assert.h>
 #include <unistd.h>
 #include "agent.h"
@@ -129,7 +130,7 @@ int is_image_valid(struct elf_info *info) {
         // printf("[-] Not ELFCLASS64\n");
         return 0;
     }
-    if (info->hdr->e_machine != EM_AARCH64) { // Check for AARCH64
+    if (info->hdr->e_machine != EM_X86_64) { // Check for x86_64
         // printf("[-] Unsupported Architecture: %d\n", info->hdr->e_machine);
         return 0; 
     }
@@ -145,32 +146,21 @@ int is_image_valid(struct elf_info *info) {
 }
 
 __attribute__((noreturn))
-void arm_jump(ElfN_Addr sp, void *entry) {
+void amd_jump(ElfN_Addr sp, void *entry) {
     asm volatile(
-        "mov sp, %0\n"
-        "mov x0, xzr\n"
-        "mov x1, xzr\n"
-        "mov x2, xzr\n"
-        "isb\n"
-        "br %1\n"
+        "mov %0, %%rsp\n"
+        "xor %%rbp, %%rbp\n"
+        "xor %%rdi, %%rdi\n"
+        "xor %%rsi, %%rsi\n"
+        "xor %%rdx, %%rdx\n"
+        "jmp *%1\n"
         :
         : "r"(sp), "r"(entry)
-        : "x0", "x1", "x2", "memory"
+        : "memory", "rdi", "rsi", "rdx"
     );
     __builtin_unreachable();
 }
 
-
-
-static inline void set_tls(void *tls_base) {
-    asm volatile (
-        "msr tpidr_el0, %0\n"
-        "isb\n"
-        :
-        : "r"(tls_base)
-        : "memory"
-    );
-}
 
 static size_t cstr_len(const char *s) {
     return s ? (strlen(s) + 1) : 0;
@@ -329,7 +319,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
     ElfN_Rela *rela_plt = NULL;
     size_t rela_plt_count = 0;
-    ElfN_Sxword plt_is_rela = 1; // AArch64 uses RELA
+    ElfN_Sxword plt_is_rela = 1; // x86_64 uses RELA
 
     // Parse dynamic segment to find relocation tables
     if (dyn_vaddr != 0) {
@@ -352,7 +342,6 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
                     rela_plt_count = d->d_un.d_val / sizeof(ElfN_Rela);
                     break;
                 case DT_PLTREL:
-                    /* should be DT_RELA on AArch64 */
                     plt_is_rela = d->d_un.d_val;
                     break;
                 default:
@@ -370,9 +359,9 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
             ElfN_Xword type = ELF64_R_TYPE(rela_dyn[i].r_info);
             ElfN_Addr *where = (ElfN_Addr *)(info->pie_base + rela_dyn[i].r_offset);
 
-            if (type == R_AARCH64_RELATIVE) {
+            if (type == R_X86_64_RELATIVE) {
                 *where = info->pie_base + rela_dyn[i].r_addend;
-            } else if (type == R_AARCH64_IRELATIVE || type == R_AARCH64_NONE) {
+            } else if (type == R_X86_64_IRELATIVE || type == R_X86_64_NONE) {
                 continue;
             } else {
                 // fprintf(stderr,
@@ -388,44 +377,54 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
     }
     
 
-    // Handle PT_TLS  (AArch64: TPIDR_EL0 must point to a TCB-like location, not .tdata)
+    // Handle PT_TLS (x86_64 SysV ABI, TLS Variant II)
     if (tls_phdr) {
-        // printf("[+] Setting up TLS\n");
-
-        // Headroom for negative TP-relative accesses
-        // Give it a page to be safe.
-        size_t headroom = 0x4000;     // for negative TP offsets into pthread
-        size_t tcb_size  = 0x2000;    // fake pthread
         size_t tls_size  = tls_phdr->p_memsz;
         size_t tls_align = tls_phdr->p_align ? tls_phdr->p_align : 16;
 
-        // Put TLS immediately before TP, aligned
         size_t tls_area = (tls_size + tls_align - 1) & ~(tls_align - 1);
 
-        size_t total = headroom + tls_area + tcb_size;
+        /* Allocate TCB + TLS */
+        size_t neg_tls = 0x80;
+        size_t tcb_size = 0x100;  // minimal fake pthread
+        size_t total = tcb_size + tls_area;
 
-        void *raw = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        // if (raw == MAP_FAILED) { perror("mmap tls"); return 0; }
+        uint8_t *block = mmap(
+            NULL, total,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1, 0
+        );
 
-        uintptr_t base = (uintptr_t)raw;
+        if (block == MAP_FAILED)
+            _exit(1);
 
-        /* TP points into the block such that (TP - tls_area) is TLS start */
-        uintptr_t tp_u = base + headroom + tls_area;
-        void *tp = (void *)tp_u;
-        void *tls_block = (void *)(tp_u - tls_area);
+        void *tcb = block + neg_tls;
+        void *tls_block = block + tcb_size;
+
+        // Zero negative space
+        memset(block, 0, neg_tls);
 
         // Copy TLS
-        memcpy(tls_block, (void *)(info->pie_base + tls_phdr->p_vaddr), tls_phdr->p_filesz);
-        memset((char *)tls_block + tls_phdr->p_filesz, 0, tls_phdr->p_memsz - tls_phdr->p_filesz);
+        memcpy(
+            tls_block,
+            (void *)(info->pie_base + tls_phdr->p_vaddr),
+            tls_phdr->p_filesz
+        );
 
-        // Optional self pointer
-        *(void **)tp = tp;
+        /* Zero .tbss */
+        memset(
+            (uint8_t *)tls_block + tls_phdr->p_filesz,
+            0,
+            tls_phdr->p_memsz - tls_phdr->p_filesz
+        );
 
-        // printf("[+] TLS raw=%p tp=%p tls_block=%p (tls_area=0x%zx headroom=0x%zx)\n", raw, tp, tls_block, tls_area, headroom);
+        /* Self pointer (glibc-compatible enough) */
+        *(void **)tcb = tcb;
 
-        set_tls(tp);    
+        /* Install FS base */
+        syscall(SYS_arch_prctl, ARCH_SET_FS, tcb);
     }
-
 
 
     // Apply RWX permissions
@@ -439,7 +438,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
         // printf("[+] Applying .rela.dyn IRELATIVE relocations\n");
         for (size_t i = 0; i < rela_dyn_count; i++) {
             ElfN_Xword type = ELF64_R_TYPE(rela_dyn[i].r_info);
-            if (type != R_AARCH64_IRELATIVE) continue;
+            if (type != R_X86_64_IRELATIVE) continue;
 
             ElfN_Addr *where = (ElfN_Addr *)(info->pie_base + rela_dyn[i].r_offset);
             ElfN_Addr resolver_addr = info->pie_base + rela_dyn[i].r_addend;
@@ -461,15 +460,15 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
             ElfN_Xword type = ELF64_R_TYPE(rela_plt[i].r_info);
             ElfN_Addr *where = (ElfN_Addr *)(info->pie_base + rela_plt[i].r_offset);
 
-            if (type == R_AARCH64_IRELATIVE) {
+            if (type == R_X86_64_IRELATIVE) {
                 ElfN_Addr resolver_addr = info->pie_base + rela_plt[i].r_addend;
                 ElfN_Addr (*resolver)(void) = (ElfN_Addr (*)(void))resolver_addr;
 
                 ElfN_Addr value = resolver();
                 *where = value;
-            } else if (type == R_AARCH64_NONE) {
+            } else if (type == R_X86_64_NONE) {
                 continue;
-            } else if (type == R_AARCH64_RELATIVE) {
+            } else if (type == R_X86_64_RELATIVE) {
                 *where = info->pie_base + rela_plt[i].r_addend;
             } else {
                 // fprintf(stderr, "[-] Unhandled .rela.plt type=%llu at idx=%zu\n", (unsigned long long)type, i);
@@ -631,7 +630,7 @@ int load_image(char *elf_start, struct elf_info *info, struct load_segment *load
 
     // fprintf(stderr, "argc=%lu argv0=%s envp0=%s\n", (unsigned long)sp[0], (char *)sp[1], (char *)(sp + 1 + argc + 1)[0]);
 
-    arm_jump((ElfN_Addr)sp, info->entry_point);
+    amd_jump((ElfN_Addr)sp, info->entry_point);
     
     return 1; // Unreachable
 }

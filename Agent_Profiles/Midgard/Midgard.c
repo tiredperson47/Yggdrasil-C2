@@ -142,7 +142,7 @@ int main() {
     profile->uuid = uuid;
     profile->path = "/v3/api/register";  // Register endpoint
     profile->agent = "Midgard";
-    profile->compile_id = strdup("a8154487-6390-49a0-b537-418ca141ef40");
+    profile->compile_id = strdup("25d50b31-0c6f-43eb-9cb8-356521ce9a4c");
     profile->reg = (int *)1;
     profile->aes = (int *)1;
 

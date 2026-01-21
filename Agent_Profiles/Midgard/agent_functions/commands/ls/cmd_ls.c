@@ -91,7 +91,7 @@ void cmd_ls(request_t *req, int sockfd, const profile_t *profile, const char *ar
         strftime(time_str, sizeof(time_str), "%b %d %H:%M", localtime(&file_stat.st_mtime));
 
         char line_buffer[2048];
-        int line_len = snprintf(line_buffer, sizeof(line_buffer), "%s %2u %-8s %-8s %8ld %s %s\n",
+        int line_len = snprintf(line_buffer, sizeof(line_buffer), "%s %2lu %-8s %-8s %8ld %s %s\n",
                mode_str,
                file_stat.st_nlink,
                owner_name,

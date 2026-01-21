@@ -1,12 +1,12 @@
 CC = gcc
-CFLAGS = -I./agent_functions -Wall -O3 -s -static-pie -fPIE
+CFLAGS = -I./agent_functions -Wall -O3 -g -static-pie -fPIE
 LDFLAGS = -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto -lcjson
 
 PACKER = upx
 
 
 NAME ?= agent
-ARCH = arm
+ARCH ?= x86_64
 HANDLERS ?= ../../Handlers
 SRCS = Midgard.c $(wildcard agent_functions/**/**/*.c)
 

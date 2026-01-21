@@ -9,6 +9,8 @@ TIME=$(/usr/bin/date -u +"%Y-%m-%d %H:%M:%S")
 
 read -p "Enter the agent's name (Default is 'agent'): " NAME
 NAME=${NAME:-agent}
+read -p "Enter the architecture (Options: x86_64, aarch64; Default: 'x86_64'): " ARCH
+ARCH=${ARCH:-x86_64}
 read -p "Enter the callback IP (Default is 127.0.0.1): " IP
 IP=${IP:-127.0.0.1}
 read -p "Enter the callback port (Default is 8000): " PORT
@@ -31,4 +33,4 @@ fi
 /usr/bin/sed -i "s/\(profile->aes = \).*/\1(int *)$AES;/" Midgard.c
 source $path/.env
 /usr/bin/sudo /usr/bin/docker exec -it mariadb mariadb -u yggdrasil -D yggdrasil -p$DB_PASS -h $DB_HOST -e "INSERT INTO payloads (compile_id, name, profile, created, use_aes, private, public) VALUES ('$UUID', '$NAME', 'Midgard', '$TIME', '$AES', '$KEY', '$IV')"
-/usr/bin/make $MODE NAME=$NAME HANDLERS=$path 
+/usr/bin/make $MODE NAME=$NAME HANDLERS=$path ARCH=$ARCH
