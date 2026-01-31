@@ -1,6 +1,12 @@
 CC = gcc
-CFLAGS = -I./agent_functions -Wall -O3 -g -static-pie -fPIE
+
+# RELEASE FLAGS:
+CFLAGS = -I./agent_functions -Wall -O3 -s -static-pie -fPIE
 LDFLAGS = -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto -lcjson
+
+# DEBUG FLAGS: 
+# CFLAGS = -I./agent_functions -Wall -O1 -g -fsanitize=address -fPIE
+# LDFLAGS = -Bstatic -luring -lmbedtls -lmbedx509 -lmbedcrypto -lcjson -lm -pie
 
 PACKER = upx
 
