@@ -1,0 +1,3 @@
+[submodule "Agent_Profiles/Obfuscation"]
+	path = Agent_Profiles/Obfuscation
+	url = https://github.com/tiredperson47/Obfuscation.git
