@@ -17,3 +17,7 @@ health.cnf
 cJSON/
 Compiled_Payloads/
 *.bak
+__pycache__/
+*.pyc
+loader*
+Obfuscation/

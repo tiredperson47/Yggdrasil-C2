@@ -103,7 +103,7 @@ EOF
 read -p "Do you want to install general dependencies (this will apt update)? (y\n) " depend
 if [[ $depend == y || $depend == Y ]]; then
     /usr/bin/sudo /usr/bin/apt update -y
-    /usr/bin/sudo /usr/bin/apt install rlwrap mariadb-client-core docker.io docker-compose golang -y
+    /usr/bin/sudo /usr/bin/apt install rlwrap mariadb-client-core docker.io docker-compose golang binutils gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu -y
 fi
 
 read -p "Do you want to install dependencies for the Midgard Agent? (y\n) " choice

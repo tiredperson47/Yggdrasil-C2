@@ -20,7 +20,7 @@ SRCS = Midgard.c $(wildcard agent_functions/**/**/*.c)
 OBJS = $(SRCS:.c=.o)
 
 
-all: agent pack shelf
+all: agent pack
 
 agent: $(OBJS)
 	$(CC) $(CFLAGS) -o ../Compiled_Payloads/$(NAME) $^ $(LDFLAGS)
@@ -35,7 +35,6 @@ pack: agent
 
 shelf: agent
 	@../Obfuscation/shelf/build_shelf.sh $(ARCH) ../Compiled_Payloads/$(NAME)
-
 
 .PHONY: clean
 clean:

