@@ -33,9 +33,6 @@ pack: agent
 	$(PACKER) ../Compiled_Payloads/$(NAME) -q -7
 	../Obfuscation/upx/upx_bytes ../Compiled_Payloads/$(NAME) ../Compiled_Payloads/$(NAME)
 
-shelf: agent
-	@../Obfuscation/shelf/build_shelf.sh $(ARCH) ../Compiled_Payloads/$(NAME)
-
 .PHONY: clean
 clean:
-	rm -f ../Compiled_Payloads/$(NAME) $(OBJS) ../Obfuscation/shelf-arm/agent.h
+	rm -f ../Compiled_Payloads/* $(OBJS)
