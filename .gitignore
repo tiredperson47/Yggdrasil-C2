@@ -20,3 +20,4 @@ Compiled_Payloads/
 __pycache__/
 *.pyc
 loader*
+.gocache/

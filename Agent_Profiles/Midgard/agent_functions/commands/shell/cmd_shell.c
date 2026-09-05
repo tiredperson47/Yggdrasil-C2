@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include "functions/send/send2serv.h"
 #include "functions/connection/connection.h"
 #include "functions/split/split.h"

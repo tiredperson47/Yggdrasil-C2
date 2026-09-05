@@ -1,0 +1,23 @@
+{ 
+    "commands":["ls", "exit", "sleep", "cat", "env", "shell", "cd"],
+    "description": {
+        "ls": "Lists directory. Relative path works EXCEPT for '~'.",
+        "exit": "Kill the agent process (won't delete the file)",
+        "sleep": "Set the sleep interval for the agent.",
+        "cat": "Reads the contents of the file. Relative path works EXCEPT for '~'.",
+        "env": "Reads environmental variables at /proc/self/environ",
+        "shell": "Spawns a shell and executes the command. Uses memfd() to execute the command and relies on PATH variable",
+        "cd": "Changes the current working directory."
+    },
+    "usage": {
+        "ls": "ls </path/to/directory>",
+        "exit": "exit",
+        "sleep": "sleep <seconds>",
+        "cat": "cat </path/to/file>",
+        "env": "env",
+        "shell": "shell <command>",
+        "cd": "cd </path/to/directory>"
+    },
+    "required_commands": ["exit", "sleep"],
+    "requires_admin": []
+}

@@ -1,0 +1,5 @@
+{
+    "protocols": ["HTTP", "HTTPS"],
+    "default_port": 80,
+    "description": "HTTP/HTTPS listener"
+}

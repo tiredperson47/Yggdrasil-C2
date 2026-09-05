@@ -1,3 +1,4 @@
-[submodule "Agent_Profiles/Obfuscation"]
-	path = Agent_Profiles/Obfuscation
+[submodule "Wrappers/Obfuscation"]
+	path = Wrappers/Obfuscation
 	url = https://github.com/tiredperson47/Obfuscation.git
+	branch = main

@@ -1,18 +1,20 @@
 #!/bin/bash
 
-read -p "Server Public IP: " HOST
-
+read -p "Server Public IP/Hostname (default: 127.0.0.1): " HOST
+HOST=${HOST:-"127.0.0.1"}
 
 # Generate random DB password.
-PASSDB=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
-# /usr/bin/sed -i "s/\(DB_PASS=\).*/\1${PASSDB}/" ../Handlers/.env
-# /usr/bin/sed -i "s/IDENTIFIED BY '[^']*'/IDENTIFIED BY '$PASSDB'/" tables.sql
-REDIS=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
-# /usr/bin/sed -i "s/\(REDIS_PASS=\).*/\1${REDIS}/" ../Handlers/.env
-HEALTHCHECK=$(/usr/bin/tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+PASSDB=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+REDIS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+HEALTHCHECK=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+SALT=$(openssl rand -hex 16)
+cd ..
+PROJECT=${PWD}
+cd ${PROJECT}/scripts
 
 # Create necessary files
-/usr/bin/cat << EOF > ../Handlers/.env
+cat << EOF > ${PROJECT}/Handlers/.env
+PROJECT_ROOT=${PROJECT}
 DB_USER=yggdrasil
 DB_PASS=${PASSDB}
 DATABASE=yggdrasil
@@ -22,57 +24,97 @@ REDIS_HOST=${HOST}                  # Same IP as Nginx reverse proxy if being us
 REDIS_PASS=${REDIS}
 YGG_CORE=${HOST}                    # Yggdrasil_Core or Nginx reverse proxy IP/Domain
 YGG_CORE_PORT=8000                  # Yggdrasil_Core or Nginx reverse proxy Port
+LOCAL_REVERSE_PROXY=True
 ENDPOINT=/v3/api/admin              # Endpoint for yggdrasil_core admin
+SALT=${SALT}
+HEALTHCHECK=${HEALTHCHECK}
 EOF
 
-/usr/bin/cat << EOF > ./tables.sql
+cat << EOF > ./tables.sql
 CREATE TABLE IF NOT EXISTS agents (
-    uuid VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,
-    status VARCHAR(10),
-    first_seen TIMESTAMP,
-    last_seen TIMESTAMP,
+    uuid CHAR(36) NOT NULL PRIMARY KEY,
+    name VARCHAR(255),
+    status VARCHAR(32),
+    first_seen DATETIME,
+    last_seen DATETIME,
     sleep INT,
-    profile VARCHAR(50),
-    ip VARCHAR(45),
-    hostname VARCHAR(100),
-    user VARCHAR(100),
-    compile_id VARCHAR(50) NOT NULL
+    profile VARCHAR(255),
+    ip VARCHAR(255),
+    process VARCHAR(255),
+    pid INT,
+    arch VARCHAR(20),
+    hostname VARCHAR(150),
+    user VARCHAR(255),
+    compile_id CHAR(36) NOT NULL,
+
+    INDEX idx_agents_compile_id (compile_id)
 );
 
-CREATE TABLE IF NOT EXISTS payloads (
-    compile_id VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    profile VARCHAR(100) NOT NULL,
-    created TIMESTAMP,
-    use_aes BOOLEAN NOT NULL DEFAULT TRUE,
-    private VARCHAR(1024),
-    public VARCHAR(1024)
+CREATE TABLE IF NOT EXIStS payloads (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    compile_id CHAR(36) NOT NULL UNIQUE,
+    profile_id CHAR(36),
+    profile VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created DATETIME NOT NULL,
+    use_aes TINYINT NOT NULL DEFAULT 0,
+    arch VARCHAR(64),
+    os VARCHAR(64),
+    listener VARCHAR(255),
+    private VARCHAR(64),
+    public VARCHAR(32),
+
+    INDEX idx_payloads_compile_id (compile_id),
+    INDEX idx_payloads_profile (profile)
+);
+
+CREATE TABLE IF NOT EXISTS operators (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS public_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    file_path VARCHAR(512) NOT NULL,
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    base_url VARCHAR(512) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 GRANT ALL PRIVILEGES ON yggdrasil.* TO 'yggdrasil'@'%' IDENTIFIED BY '${PASSDB}' REQUIRE SSL;
 
+DROP USER IF EXISTS 'healthcheck'@'mariadb';
 DROP USER IF EXISTS 'healthcheck'@'localhost';
+DROP USER IF EXISTS 'healthcheck'@'127.0.0.1';
+CREATE USER 'healthcheck'@'mariadb' IDENTIFIED BY '${HEALTHCHECK}';
 CREATE USER 'healthcheck'@'localhost' IDENTIFIED BY '${HEALTHCHECK}';
+CREATE USER 'healthcheck'@'127.0.0.1' IDENTIFIED BY '${HEALTHCHECK}';
+GRANT USAGE ON *.* TO 'healthcheck'@'mariadb';
 GRANT USAGE ON *.* TO 'healthcheck'@'localhost';
+GRANT USAGE ON *.* TO 'healthcheck'@'127.0.0.1';
 FLUSH PRIVILEGES;
 EOF
 
-/usr/bin/cat << EOF > ../Handlers/mariadb/health.cnf
+cat << EOF > ${PROJECT}/Handlers/mariadb/health.cnf
 [client]
 user=healthcheck
 password=${HEALTHCHECK}
 socket=/var/run/mysqld/mysqld.sock
+host=127.0.0.1
 EOF
 
-/usr/bin/chmod 600 ../Handlers/.env ../Handlers/mariadb/health.cnf tables.sql
+chmod 600 ${PROJECT}/Handlers/.env ${PROJECT}/Handlers/mariadb/health.cnf tables.sql
 
-/usr/bin/mkdir -p ../Handlers/nginx/certs
-/usr/bin/mkdir -p ../Handlers/mariadb/certs
-/usr/bin/mkdir -p ../Handlers/Yggdrasil_Core/certs
-/usr/bin/mkdir -p ../Agent_Profiles/Compiled_Payloads
+mkdir -p ${PROJECT}/Handlers/certs
+mkdir -p ${PROJECT}/Handlers/mariadb/certs
+mkdir -p ${PROJECT}/Compiled_Payloads
+mkdir -p ${PROJECT}/Wrappers
 
-/usr/bin/cat << EOF > ../Handlers/nginx/certs/openssl.cnf
+cat << EOF > ${PROJECT}/Handlers/certs/openssl.cnf
 [ v3_ca ]
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always,issuer
@@ -100,52 +142,63 @@ EOF
 
 
 # Install dependencies
-read -p "Do you want to install general dependencies (this will apt update)? (y\n) " depend
+read -p "If this is a first time installation, please install dependencies. Otherwise you may skip. Install? (y\n) " depend
 if [[ $depend == y || $depend == Y ]]; then
-    /usr/bin/sudo /usr/bin/apt update -y
-    /usr/bin/sudo /usr/bin/apt install rlwrap mariadb-client-core docker.io docker-compose golang binutils gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu -y
+    sudo apt update -y
+    sudo apt install rlwrap mariadb-client-core docker.io docker-compose golang binutils gcc-x86-64-linux-gnu gcc-aarch64-linux-gnu argon2 -y
 fi
 
 read -p "Do you want to install dependencies for the Midgard Agent? (y\n) " choice
-if [[ $choice == y || $choice == Y ]]; then
-    /usr/bin/sudo /usr/bin/apt install liburing-dev libmbedtls-dev libcjson-dev upx cmake -y
-    /usr/bin/git clone https://github.com/DaveGamble/cJSON.git
+if [[ "${choice,,}" == y ]]; then
+    sudo apt install upx cmake -y
+    cd ${PROJECT}/Agent_Profiles/Midgard/compiler
+    git clone https://github.com/DaveGamble/cJSON.git
     cd cJSON
-    /usr/bin/mkdir build
+    mkdir build
     cd build
-    /usr/bin/cmake .. -DENABLE_CJSON_UTILS=On -DENABLE_CJSON_TEST=Off -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=Off
-    /usr/bin/make
-    /usr/bin/sudo /usr/bin/make install
-    /usr/bin/sudo /usr/sbin/ldconfig
-    cd ../../
+    cmake .. -DENABLE_CJSON_UTILS=On -DENABLE_CJSON_TEST=Off -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=Off
+    make
+    sudo make install
+    sudo /usr/sbin/ldconfig
+    cd ${PROJECT}/scripts
 fi
 
+read -p "Will you use an nginx reverse proxy? (y\n) [default: y]: " reverse
+reverse=${reverse:-"y"}
+if [[ "${reverse,,}" == y ]]; then
+    read -p "Will the reverse proxy be on the same server as the C2? (y\n) [default: y]: " local
+    local=${local:-"y"}
+    if [[ "${local,,}" == y ]]; then
+        sed -i '/ports:/{N;s/ports:[ \t]*\n[ \t]*- "8081:8081"/expose:\n      - "8081"/}' ${PROJECT}/Handlers/docker-compose.yml
+        echo "LOCAL_PROXY=1" >> ${PROJECT}/Handlers/.env
+    else
+        sed -i '/expose:/{N;s/expose:[ \t]*\n[ \t]*- "8081"/ports:\n      - "8081:8081"/}' ${PROJECT}/Handlers/docker-compose.yml
+        echo "LOCAL_PROXY=0" >> ${PROJECT}/Handlers/.env
+    fi
+else
+    sed -i '/expose:/{N;s/expose:[ \t]*\n[ \t]*- "8081"/ports:\n      - "8081:8081"/}' ${PROJECT}/Handlers/docker-compose.yml
+    echo "LOCAL_PROXY=0" >> ${PROJECT}/Handlers/.env
+fi
 
-
-cd ../Handlers/nginx/certs
+cd ${PROJECT}/Handlers/certs
 # Generate CA certificates
-/usr/bin/sed -i "s/IP\.2 = .*/IP.2 = $HOST/" openssl.cnf
-/usr/bin/openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out ca.key
-/usr/bin/openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.crt -subj "/CN=ca" -config openssl.cnf -extensions v3_ca
+sed -i "s/IP\.2 = .*/IP.2 = $HOST/" openssl.cnf
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out ca.key
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.crt -subj "/CN=ca" -config openssl.cnf -extensions v3_ca
 
 # Generate nginx certificate
-/usr/bin/openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out nginx.key
-/usr/bin/openssl req -new -key nginx.key -out nginx.csr -subj "/CN=Nginx" 
-/usr/bin/openssl x509 -req -in nginx.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out nginx.crt -days 365 -sha256 -extfile openssl.cnf -extensions v3_nginx_server
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out server.key
+openssl req -new -key server.key -out nginx.csr -subj "/CN=Nginx" 
+openssl x509 -req -in nginx.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile openssl.cnf -extensions v3_nginx_server
 
 # Create client keys
-/usr/bin/openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out client.key
-/usr/bin/openssl req -new -key client.key -out client.csr -subj "/C=US/ST=California/CN=Client"
-/usr/bin/openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -sha256 -extfile openssl.cnf -extensions v3_client
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out client.key
+openssl req -new -key client.key -out client.csr -subj "/C=US/ST=California/CN=Client"
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -sha256 -extfile openssl.cnf -extensions v3_client
 
-/usr/bin/rm openssl.cnf *.srl *.csr
-/usr/bin/cp ca.crt ../../mariadb/certs/
-/usr/bin/cp nginx.crt ../../mariadb/certs/
-/usr/bin/cp nginx.key ../../mariadb/certs/
-/usr/bin/cp ca.crt ../../Yggdrasil_Core/certs
-/usr/bin/cp client.crt ../../Yggdrasil_Core/certs
-/usr/bin/cp client.key ../../Yggdrasil_Core/certs
-cd ../../
+rm openssl.cnf *.srl *.csr
+cp server.crt server.key ca.crt ${PROJECT}/Handlers/mariadb/certs/
+cd ${PROJECT}/Handlers
 
 # Sed command to add nameserver 8.8.8.8 to /etc/resolv.conf (for go mod download)
 sudo sed -i '
@@ -158,27 +211,52 @@ nameserver 8.8.8.8
 
 
 # Build the infrastructure and modify public IP
-/usr/bin/sudo /usr/bin/docker-compose up -d --build
-cd ..
-if /usr/bin/python3 scripts/cert_header.py -m Server Handlers/nginx/certs/ca.crt > Agent_Profiles/Midgard/agent_functions/functions/connection/cert.h; then
+sudo docker-compose up -d --build
+cd ${PROJECT}
+if python3 scripts/cert_header.py -m Server ${PROJECT}/Handlers/certs/ca.crt > ${PROJECT}/Agent_Profiles/Midgard/agent_functions/functions/connection/cert.h; then
     echo ""
 else
     exit 1
 fi
-/usr/bin/sed -i "s/127\.0\.0\.1/$HOST/g" Agent_Profiles/Midgard/agent_functions/functions/connection/connection.c
-/usr/bin/sed -i "s/127\.0\.0\.1/$HOST/g" Handlers/nginx/scripts/stager
-/usr/bin/sed -i "s/YGG_CORE\=127\.0\.0\.1/YGG_CORE\=$HOST/g" Handlers/.env
+sed -i "s/127\.0\.0\.1/$HOST/g" ${PROJECT}/Agent_Profiles/Midgard/agent_functions/functions/connection/connection.c
+sed -i "s/127\.0\.0\.1/$HOST/g" ${PROJECT}/Handlers/Yggdrasil_Core/hosted_files/stager
+sed -i "s/YGG_CORE\=127\.0\.0\.1/YGG_CORE\=$HOST/g" ${PROJECT}/Handlers/.env
 
 
 
 echo "========================================="
 echo '[!] Waiting for database to be healthy...'
-until [ "$(/usr/bin/sudo /usr/bin/docker inspect -f '{{.State.Health.Status}}' mariadb)" == "healthy" ]; do
-    /usr/bin/sleep 1
+# Generate default admin password (16 chars: uppercase, lowercase, numbers, special chars)
+ADMIN_PASSWORD=""
+while [ ${#ADMIN_PASSWORD} -lt 16 ]; do
+    ADMIN_PASSWORD="${ADMIN_PASSWORD}$(tr -dc 'A-Z' < /dev/urandom | head -c 1)"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD}$(tr -dc 'a-z' < /dev/urandom | head -c 1)"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD}$(tr -dc '0-9' < /dev/urandom | head -c 1)"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD}$(tr -dc '!@#$%^&*' < /dev/urandom | head -c 1)"
+done
+ADMIN_PASSWORD=$(echo -n "$ADMIN_PASSWORD" | head -c 16)
+ADMIN_SALT="$SALT"
+HASH=$(echo -n "$ADMIN_PASSWORD" | argon2 "$ADMIN_SALT" -id -m 14 -t 2 -p 4 -l 32 -r | tr -d '\n')
+
+until [ "$(sudo docker inspect -f '{{.State.Health.Status}}' mariadb)" == "healthy" ]; do
+    sleep 1
 done
 echo '[+] Database is healthy. Importing tables...'
 
-/usr/bin/sleep 10    # This is to make sure that mariadb database is fully set up before adding tables
-/usr/bin/sudo /usr/bin/docker exec -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil < scripts/tables.sql
-/usr/bin/rm scripts/tables.sql
+sleep 10
+sudo docker exec -e MYSQL_PWD="$PASSDB" -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil < ${PROJECT}/scripts/tables.sql
+echo "INSERT INTO operators (username, password, role) VALUES ('admin', '$HASH', 'admin');" | sudo docker exec -e MYSQL_PWD="$PASSDB" -i mariadb mariadb -h localhost -u root -p"$PASSDB" yggdrasil
+
 echo '[+] Done!'
+
+echo ""
+echo "========================================="
+echo "[+] DEFAULT ADMIN CREDENTIALS"
+echo "========================================="
+echo "Username: admin"
+echo "Password: ${ADMIN_PASSWORD}"
+echo "========================================="
+echo ""
+echo "YGGDRASIL_ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> ${PROJECT}/Handlers/.env
+
+rm ${PROJECT}/scripts/tables.sql

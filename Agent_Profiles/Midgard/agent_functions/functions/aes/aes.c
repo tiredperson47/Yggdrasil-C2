@@ -26,11 +26,11 @@ unsigned char *aes_decrypt(char *input, profile_t *profile) {
     unsigned char iv[16];
 
     if (strlen(profile->key) != 64) {
-        // fprintf(stderr, "Error: Key hex string must be 64 characters long for AES-256.\n");
+        fprintf(stderr, "Error: Key hex string must be 64 characters long for AES-256.\n");
         return NULL;
     }
     if (strlen(profile->iv) != 32) {
-        // fprintf(stderr, "Error: IV hex string must be 32 characters long for AES.\n");
+        fprintf(stderr, "Error: IV hex string must be 32 characters long for AES.\n");
         return NULL;
     }
 
@@ -45,6 +45,16 @@ unsigned char *aes_decrypt(char *input, profile_t *profile) {
     size_t input_len = strlen(input);
     size_t ciphertext_len;
     unsigned char *ciphertext = base64_decode(input, input_len, &ciphertext_len, 0);
+    if (ciphertext == NULL || ciphertext_len == 0) {
+        fprintf(stderr, "Error: base64 decode failed or empty ciphertext\n");
+        return NULL;
+    }
+
+    if (ciphertext_len % 16 != 0) {
+        fprintf(stderr, "Error: ciphertext_len=%zu is not multiple of 16\n", ciphertext_len);
+        free(ciphertext);
+        return NULL;
+    }
 
     unsigned char *decrypted_output = malloc(ciphertext_len + 1);
 
@@ -66,32 +76,33 @@ unsigned char *aes_decrypt(char *input, profile_t *profile) {
 
     ret = mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_DECRYPT, ciphertext_len, current_iv, ciphertext, decrypted_output);
     if (ret != 0) {
-        // fprintf(stderr, "mbedtls_aes_crypt_cbc failed: -0x%04X\n", -ret);
+        fprintf(stderr, "mbedtls_aes_crypt_cbc failed: -0x%04X\n", -ret);
         goto cleanup;
     }
 
     // Handle PKCS7 Padding
     size_t pad_len = decrypted_output[ciphertext_len - 1];
-    size_t actual_len = ciphertext_len - pad_len;
     int padding_ok = 1;
 
     // Basic padding validation
-    if (pad_len == 0 || pad_len > 16) {
-        padding_ok = 0;
+    if (pad_len == 0 || pad_len > 16 || pad_len > ciphertext_len) {
+        fprintf(stderr, "Invalid padding length: %zu\n", pad_len);
         goto cleanup;
-    } else {
-        for (size_t i = 0; i < pad_len; i++) {
-            if (decrypted_output[ciphertext_len - 1 - i] != pad_len) {
-                padding_ok = 0;
-                break;
-            }
+    }
+
+    for (size_t i = 0; i < pad_len; i++) {
+        if (decrypted_output[ciphertext_len - 1 - i] != pad_len) {
+            fprintf(stderr, "Invalid padding byte at offset %zu\n", i);
+            goto cleanup;
         }
     }
+
+    size_t actual_len = ciphertext_len - pad_len;
 
     if (padding_ok) {
         decrypted_output[actual_len] = '\0'; 
     } else {
-        // fprintf(stderr, "Warning: Invalid padding detected!\n");
+        fprintf(stderr, "Warning: Invalid padding detected!\n");
         free(decrypted_output);
         decrypted_output = NULL;
         goto cleanup;

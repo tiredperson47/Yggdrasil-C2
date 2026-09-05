@@ -1,0 +1,8 @@
+**/*.o
+**/*.a
+**/*.so
+**/*.elf
+**/*.bin
+compiler/cJSON/build
+compiler/cJSON/tests
+compiler/cJSON/fuzzing

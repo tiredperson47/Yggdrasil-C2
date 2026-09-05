@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -12,14 +13,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func handleError(c *gin.Context, err error) bool {
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Error": "Bad Data"})
+		return true
+	}
+	return false
+}
+
 func main() {
 	route := gin.Default()
 
 	// Structs for data processing
 	type RegisterRequest struct {
-		B64UUID string `json:"uuid" binding:"required"`
-		B64User string `json:"user"`
-		B64CID  string `json:"data"`
+		B64User     string `json:"user"`
+		B64CID      string `json:"data" binding:"required"`
+		B64Profile  string `json:"profile"`
+		B64Hostname string `json:"hostname"`
+		B64Process  string `json:"process"`
+		B64PID      string `json:"pid"`
+		B64Arch     string `json:"arch"`
 	}
 
 	type CommandRequest struct {
@@ -28,39 +41,66 @@ func main() {
 	}
 
 	route.POST("/register", func(c *gin.Context) {
+		raw, _ := io.ReadAll(c.Request.Body)
+		log.Printf("register headers: %#v", c.Request.Header)
+		log.Printf("register raw body: %q", string(raw))
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(raw))
+
 		var data RegisterRequest
-		if err := c.BindJSON(&data); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
+		if err := c.ShouldBindJSON(&data); err != nil {
+			log.Printf("register bind error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+				"body":  string(raw),
+			})
 			return
 		}
 		byteuser, err := base64.StdEncoding.DecodeString(data.B64User) //decode base64 string
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"Error": "Bad Data"})
-			return
-		}
-		byteuuid, err := base64.StdEncoding.DecodeString(data.B64UUID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"Error": "Bad Data"})
+		if handleError(c, err) {
 			return
 		}
 		bytecompile_id, err := base64.StdEncoding.DecodeString(data.B64CID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"Error": "Bad Data"})
+		if handleError(c, err) {
 			return
 		}
+		byteprofile, err := base64.StdEncoding.DecodeString(data.B64Profile)
+		if handleError(c, err) {
+			return
+		}
+		bytehostname, err := base64.StdEncoding.DecodeString(data.B64Hostname)
+		if handleError(c, err) {
+			return
+		}
+		byteprocess, err := base64.StdEncoding.DecodeString(data.B64Process)
+		if handleError(c, err) {
+			return
+		}
+		bytepid, err := base64.StdEncoding.DecodeString(data.B64PID)
+		if handleError(c, err) {
+			return
+		}
+		bytearch, err := base64.StdEncoding.DecodeString(data.B64Arch)
+		if handleError(c, err) {
+			return
+		}
+		
 		user := string(byteuser)
-		uuid := string(byteuuid)
 		compile_id := string(bytecompile_id)
-		profile := c.GetHeader("Sec-Purpose")
-		hostname := c.GetHeader("X-Forwarded-Host")
+		profile := string(byteprofile)
+		hostname := string(bytehostname)
+		process := string(byteprocess)
+		pid := string(bytepid)
+		arch := string(bytearch)
 		ip := c.GetHeader("X-Real-IP")
 
 		CoreData := map[string]string{
 			"user":       user,
-			"uuid":       uuid,
 			"compile_id": compile_id,
 			"profile":    profile,
 			"hostname":   hostname,
+			"process":    process,
+			"pid":        pid,
+			"arch":       arch,
 			"ip":         ip,
 		}
 
@@ -70,14 +110,14 @@ func main() {
 			return
 		}
 
-		req, err := http.NewRequest("POST", "http://Yggdrasil_Core:8000/register", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequest("POST", "https://Yggdrasil_Core:8000/register", bytes.NewBuffer(jsonData))
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to create request"})
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{}
+		client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 		resp, err := client.Do(req)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "forwarding to core failed"})
@@ -94,7 +134,7 @@ func main() {
 
 	route.Match([]string{"GET", "POST"}, "/callback", func(c *gin.Context) {
 		if c.Request.Method == "GET" {
-			b64uuid := c.Query("uuid")
+			b64uuid := c.Query("id")
 			byteuuid, err := base64.StdEncoding.DecodeString(b64uuid)
 			if err != nil {
 				log.Println(err)
@@ -113,14 +153,14 @@ func main() {
 				return
 			}
 
-			req, err := http.NewRequest("POST", "http://Yggdrasil_Core:8000/callback", bytes.NewBuffer(jsonData))
+			req, err := http.NewRequest("POST", "https://Yggdrasil_Core:8000/callback", bytes.NewBuffer(jsonData))
 			if err != nil {
 				c.JSON(500, gin.H{"error": "failed to create request"})
 				return
 			}
 			req.Header.Set("Content-Type", "application/json")
 
-			client := &http.Client{}
+			client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 			resp, err := client.Do(req)
 			if err != nil {
 				c.JSON(500, gin.H{"error": "forwarding to core failed"})
@@ -159,14 +199,14 @@ func main() {
 				return
 			}
 
-			req, err := http.NewRequest("POST", "http://Yggdrasil_Core:8000/callback", bytes.NewBuffer(jsonData))
+			req, err := http.NewRequest("POST", "https://Yggdrasil_Core:8000/callback", bytes.NewBuffer(jsonData))
 			if err != nil {
 				c.JSON(500, gin.H{"error": "failed to create request"})
 				return
 			}
 			req.Header.Set("Content-Type", "application/json")
 
-			client := &http.Client{}
+			client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 			resp, err := client.Do(req)
 			if err != nil {
 				c.JSON(500, gin.H{"error": "forwarding to core failed"})

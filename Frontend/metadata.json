@@ -1,0 +1,6 @@
+
+{
+  "name": "Yggdrasil Web C2",
+  "description": "A high-performance web-based command and control interface for the Yggdrasil infrastructure, featuring integrated CLI, agent monitoring, beacon building, and Nmap data management.",
+  "requestFramePermissions": []
+}

@@ -10,6 +10,9 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# Hosted files directory
+RUN mkdir -p /app/hosted_files
+
 # Copy go mod files first for caching
 COPY go.mod go.sum ./
 RUN go mod download
@@ -25,16 +28,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o yggdrasil_core
 # =========================
 FROM alpine:3.20
 
-# Install CA certs for TLS (MariaDB + HTTPS)
-RUN apk add --no-cache ca-certificates
+# Install CA certs and docker CLI for DooD
+RUN apk add --no-cache ca-certificates docker-cli
 
 WORKDIR /app
 
 # Copy binary
 COPY --from=builder /app/yggdrasil_core .
-
-# Copy certs if used by the app
-COPY certs ./certs
 
 # Environment safety
 ENV GIN_MODE=release

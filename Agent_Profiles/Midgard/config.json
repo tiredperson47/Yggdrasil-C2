@@ -1,0 +1,27 @@
+{
+  "profile_id": "0c00c3e3-a934-416f-9ae1-7c1a5f926f64",
+  "os": ["Linux"],
+  "languages": ["C"] ,
+  "payload_output": ["elf", "shellcode"],
+  "architectures": ["x86_64", "aarch64"],
+  "supported_listeners": ["http"],
+  "supported_wrappers": {
+    "Obfuscation": {
+      "supported_modules": {
+        "shelf": {
+          "required": {
+            "fields": ["pid"],
+            "inject_file_name": ["aarch64_reg-loader.c", "x64_reg-loader.c"]
+          },
+          "optional": []
+        },
+        "upx": {
+          "required": {
+            "fields": []
+          },
+          "optional": []
+        }
+      }
+    }
+  }
+}

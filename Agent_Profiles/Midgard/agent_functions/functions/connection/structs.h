@@ -32,8 +32,11 @@ typedef struct {
     char *compile_id;
     char *key;
     char *iv;
-    int *reg;
-    int *aes;
+    int   reg;
+    int   aes;
+    char *process;
+    char *pid;
+    int   pid_len;
 } profile_t;
 
 #endif

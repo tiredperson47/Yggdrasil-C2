@@ -11,8 +11,9 @@
 #include <time.h>
 
 #define HOST "127.0.0.1"
+#define HOSTNAME "localhost"
 #define PORT 8000
-#define QUEUE_DEPTH 5
+#define QUEUE_DEPTH 3
 
 
 int tls_ring_send(void *ctx, const unsigned char *buf, size_t len) {
@@ -189,7 +190,7 @@ int connection(request_t *req) {
     }
 
     // Set the hostname for Server Name Indication (SNI) - CRITICAL for many servers
-    if (mbedtls_ssl_set_hostname(&req->ssl, HOST) != 0) {
+    if (mbedtls_ssl_set_hostname(&req->ssl, HOSTNAME) != 0) {
         fprintf(stderr, "mbedtls_ssl_set_hostname failed\n");
         return -1;
     }
@@ -200,7 +201,15 @@ int connection(request_t *req) {
     while ((ret = mbedtls_ssl_handshake(&req->ssl)) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
             fprintf(stderr, "mbedtls_ssl_handshake returned -0x%x\n", (unsigned int)-ret);
-            return -1;
+            
+            uint32_t flags = mbedtls_ssl_get_verify_result(&req->ssl);
+
+            if (flags != 0) {
+                char vrfy_buf[512];
+                mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "  ! ", flags);
+                fprintf(stderr, "verify flags:\n%s\n", vrfy_buf);
+                return -1;
+            }
         }
     }
 
@@ -216,6 +225,7 @@ void cleanup_connection(request_t *req) {
         if(req->ring) {
             io_uring_queue_exit(req->ring);
             free(req->ring);
+            req->ring = NULL;
         }
         
         mbedtls_x509_crt_free(&req->cacert);
